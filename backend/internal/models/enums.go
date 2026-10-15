@@ -1,4 +1,4 @@
-package llm
+package models
 
 // CEFRLevel — уровень английского языка для материала и сложности модуля.
 type CEFRLevel string

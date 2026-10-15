@@ -42,8 +42,8 @@ func Migrate(ctx context.Context, db *gorm.DB) error {
 			return fmt.Errorf("set migration schema: %w", err)
 		}
 		if err := tx.AutoMigrate(
-			&users.User{}, &topics.Topic{}, &llm.Material{}, &llm.Module{},
-			&llm.Exercise{}, &llm.Answer{}, &llm.LLMRequest{},
+			&users.User{}, &topics.Topic{}, &llm.Material{}, &topics.Module{},
+			&topics.Exercise{}, &llm.Answer{}, &llm.LLMRequest{},
 		); err != nil {
 			return fmt.Errorf("auto-migrate models: %w", err)
 		}

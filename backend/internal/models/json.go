@@ -1,4 +1,4 @@
-package llm
+package models
 
 import (
 	"database/sql/driver"
@@ -22,7 +22,7 @@ func (value JSON) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	if !json.Valid(value) {
-		return nil, fmt.Errorf("llm.JSON: invalid JSON")
+		return nil, fmt.Errorf("models.JSON: invalid JSON")
 	}
 	return string(value), nil
 }
@@ -30,7 +30,7 @@ func (value JSON) Value() (driver.Value, error) {
 // Scan копирует буфер драйвера: он может быть повторно использован после чтения строки.
 func (value *JSON) Scan(source any) error {
 	if value == nil {
-		return fmt.Errorf("llm.JSON: Scan on nil receiver")
+		return fmt.Errorf("models.JSON: Scan on nil receiver")
 	}
 	if source == nil {
 		*value = nil
@@ -43,10 +43,10 @@ func (value *JSON) Scan(source any) error {
 	case string:
 		raw = []byte(source)
 	default:
-		return fmt.Errorf("llm.JSON: cannot scan %T", source)
+		return fmt.Errorf("models.JSON: cannot scan %T", source)
 	}
 	if !json.Valid(raw) {
-		return fmt.Errorf("llm.JSON: invalid JSON")
+		return fmt.Errorf("models.JSON: invalid JSON")
 	}
 	*value = append(JSON(nil), raw...)
 	return nil
@@ -58,7 +58,7 @@ func (value JSON) MarshalJSON() ([]byte, error) {
 		return []byte("null"), nil
 	}
 	if !json.Valid(value) {
-		return nil, fmt.Errorf("llm.JSON: invalid JSON")
+		return nil, fmt.Errorf("models.JSON: invalid JSON")
 	}
 	return value, nil
 }
@@ -66,10 +66,10 @@ func (value JSON) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON сохраняет независимую копию данных запроса.
 func (value *JSON) UnmarshalJSON(raw []byte) error {
 	if value == nil {
-		return fmt.Errorf("llm.JSON: UnmarshalJSON on nil receiver")
+		return fmt.Errorf("models.JSON: UnmarshalJSON on nil receiver")
 	}
 	if !json.Valid(raw) {
-		return fmt.Errorf("llm.JSON: invalid JSON")
+		return fmt.Errorf("models.JSON: invalid JSON")
 	}
 	*value = append(JSON(nil), raw...)
 	return nil
