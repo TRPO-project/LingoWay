@@ -1,0 +1,457 @@
+{
+  "version": "0.2.0",
+  "examples": [
+    {
+      "exercise": {
+        "type": "vocabulary_gap",
+        "instruction": "Выберите правильный вариант.",
+        "question_text": "The ___ is a set of steps to solve a problem.",
+        "content": {
+          "format": "single_choice",
+          "options": [
+            {
+              "id": "c1",
+              "text": "algorithm"
+            },
+            {
+              "id": "c2",
+              "text": "apple"
+            },
+            {
+              "id": "c3",
+              "text": "airport"
+            },
+            {
+              "id": "c4",
+              "text": "animal"
+            }
+          ]
+        },
+        "answer_key": {
+          "correct_choice_id": "c1"
+        },
+        "explanation": "Algorithm — последовательность шагов для решения задачи."
+      },
+      "response": {
+        "format": "single_choice",
+        "choice_id": "c1"
+      }
+    },
+    {
+      "exercise": {
+        "type": "vocabulary_matching_translation",
+        "instruction": "Соедините слово с переводом.",
+        "question_text": "algorithm · database · variable · function",
+        "content": {
+          "format": "matching",
+          "left_items": [
+            {
+              "id": "w1",
+              "text": "algorithm"
+            },
+            {
+              "id": "w2",
+              "text": "database"
+            },
+            {
+              "id": "w3",
+              "text": "variable"
+            },
+            {
+              "id": "w4",
+              "text": "function"
+            }
+          ],
+          "right_items": [
+            {
+              "id": "r1",
+              "text": "переменная"
+            },
+            {
+              "id": "r2",
+              "text": "алгоритм"
+            },
+            {
+              "id": "r3",
+              "text": "функция"
+            },
+            {
+              "id": "r4",
+              "text": "база данных"
+            }
+          ]
+        },
+        "answer_key": {
+          "pairs": [
+            {
+              "left_id": "w1",
+              "right_id": "r2"
+            },
+            {
+              "left_id": "w2",
+              "right_id": "r4"
+            },
+            {
+              "left_id": "w3",
+              "right_id": "r1"
+            },
+            {
+              "left_id": "w4",
+              "right_id": "r3"
+            }
+          ]
+        },
+        "explanation": "Каждое слово соединяется ровно с одним соответствующим переводом или определением."
+      },
+      "response": {
+        "format": "matching",
+        "pairs": [
+          {
+            "left_id": "w1",
+            "right_id": "r2"
+          },
+          {
+            "left_id": "w2",
+            "right_id": "r4"
+          },
+          {
+            "left_id": "w3",
+            "right_id": "r1"
+          },
+          {
+            "left_id": "w4",
+            "right_id": "r3"
+          }
+        ]
+      }
+    },
+    {
+      "exercise": {
+        "type": "vocabulary_matching_definition",
+        "instruction": "Соедините слово с определением на английском.",
+        "question_text": "algorithm · database · variable · function",
+        "content": {
+          "format": "matching",
+          "left_items": [
+            {
+              "id": "w1",
+              "text": "algorithm"
+            },
+            {
+              "id": "w2",
+              "text": "database"
+            },
+            {
+              "id": "w3",
+              "text": "variable"
+            },
+            {
+              "id": "w4",
+              "text": "function"
+            }
+          ],
+          "right_items": [
+            {
+              "id": "r1",
+              "text": "a block of code that does a task"
+            },
+            {
+              "id": "r2",
+              "text": "a value that can change"
+            },
+            {
+              "id": "r3",
+              "text": "a collection of organized data"
+            },
+            {
+              "id": "r4",
+              "text": "a set of steps to solve a problem"
+            }
+          ]
+        },
+        "answer_key": {
+          "pairs": [
+            {
+              "left_id": "w1",
+              "right_id": "r4"
+            },
+            {
+              "left_id": "w2",
+              "right_id": "r3"
+            },
+            {
+              "left_id": "w3",
+              "right_id": "r2"
+            },
+            {
+              "left_id": "w4",
+              "right_id": "r1"
+            }
+          ]
+        },
+        "explanation": "Каждое слово соединяется ровно с одним соответствующим переводом или определением."
+      },
+      "response": {
+        "format": "matching",
+        "pairs": [
+          {
+            "left_id": "w1",
+            "right_id": "r4"
+          },
+          {
+            "left_id": "w2",
+            "right_id": "r3"
+          },
+          {
+            "left_id": "w3",
+            "right_id": "r2"
+          },
+          {
+            "left_id": "w4",
+            "right_id": "r1"
+          }
+        ]
+      }
+    },
+    {
+      "exercise": {
+        "type": "vocabulary_context_choice",
+        "instruction": "Выберите правильный вариант.",
+        "question_text": "The developer fixed a ___ in the code.",
+        "content": {
+          "format": "single_choice",
+          "options": [
+            {
+              "id": "c1",
+              "text": "keyboard"
+            },
+            {
+              "id": "c2",
+              "text": "bug"
+            },
+            {
+              "id": "c3",
+              "text": "cloud"
+            },
+            {
+              "id": "c4",
+              "text": "screen"
+            }
+          ]
+        },
+        "answer_key": {
+          "correct_choice_id": "c2"
+        },
+        "explanation": "Fix a bug означает исправить ошибку в программе. Остальные слова не обозначают ошибку."
+      },
+      "response": {
+        "format": "single_choice",
+        "choice_id": "c2"
+      }
+    },
+    {
+      "exercise": {
+        "type": "grammar_brackets",
+        "instruction": "Выберите правильный вариант.",
+        "question_text": "She ___ (write) the function yesterday.",
+        "content": {
+          "format": "single_choice",
+          "options": [
+            {
+              "id": "c1",
+              "text": "write"
+            },
+            {
+              "id": "c2",
+              "text": "writes"
+            },
+            {
+              "id": "c3",
+              "text": "wrote"
+            },
+            {
+              "id": "c4",
+              "text": "written"
+            }
+          ]
+        },
+        "answer_key": {
+          "correct_choice_id": "c3"
+        },
+        "explanation": "Yesterday указывает на Past Simple. Прошедшая форма write — wrote."
+      },
+      "response": {
+        "format": "single_choice",
+        "choice_id": "c3"
+      }
+    },
+    {
+      "exercise": {
+        "type": "grammar_tense",
+        "instruction": "Выберите правильный вариант.",
+        "question_text": "I ___ this database last year.",
+        "content": {
+          "format": "single_choice",
+          "options": [
+            {
+              "id": "c1",
+              "text": "created"
+            },
+            {
+              "id": "c2",
+              "text": "have created"
+            },
+            {
+              "id": "c3",
+              "text": "create"
+            },
+            {
+              "id": "c4",
+              "text": "will create"
+            }
+          ]
+        },
+        "answer_key": {
+          "correct_choice_id": "c1"
+        },
+        "explanation": "Last year обозначает завершённое время в прошлом, поэтому используется Past Simple: created."
+      },
+      "response": {
+        "format": "single_choice",
+        "choice_id": "c1"
+      }
+    },
+    {
+      "exercise": {
+        "type": "grammar_word_order",
+        "instruction": "Составьте перевод; некоторые слова лишние.",
+        "question_text": "Я использую алгоритм для решения задач.",
+        "content": {
+          "format": "word_order",
+          "source_text": "Я использую алгоритм для решения задач.",
+          "target_language": "en",
+          "word_bank": [
+            {
+              "id": "t1",
+              "text": "problems"
+            },
+            {
+              "id": "t2",
+              "text": "I"
+            },
+            {
+              "id": "t3",
+              "text": "apple"
+            },
+            {
+              "id": "t4",
+              "text": "an"
+            },
+            {
+              "id": "t5",
+              "text": "solve"
+            },
+            {
+              "id": "t6",
+              "text": "algorithm"
+            },
+            {
+              "id": "t7",
+              "text": "airport"
+            },
+            {
+              "id": "t8",
+              "text": "to"
+            },
+            {
+              "id": "t9",
+              "text": "use"
+            }
+          ]
+        },
+        "answer_key": {
+          "token_ids": [
+            "t2",
+            "t9",
+            "t4",
+            "t6",
+            "t8",
+            "t5",
+            "t1"
+          ],
+          "correct_translation": "I use an algorithm to solve problems."
+        },
+        "explanation": "Порядок: подлежащее, сказуемое, дополнение и цель действия. Apple и airport не используются."
+      },
+      "response": {
+        "format": "word_order",
+        "token_ids": [
+          "t2",
+          "t9",
+          "t4",
+          "t6",
+          "t8",
+          "t5",
+          "t1"
+        ]
+      }
+    },
+    {
+      "exercise": {
+        "type": "comprehension_question",
+        "instruction": "Ответьте по тексту.",
+        "question_text": "What is an algorithm?",
+        "content": {
+          "format": "free_text",
+          "context": "An algorithm is a set of steps to solve a problem. A function is a block of code that does a task."
+        },
+        "answer_key": {
+          "rubric": {
+            "criteria": [
+              "Ответ передаёт идею набора шагов.",
+              "Указана цель решения задачи."
+            ],
+            "reference_answer": "It is a set of steps to solve a problem."
+          }
+        },
+        "explanation": "Ответ нужно подтвердить смыслом исходного текста."
+      },
+      "response": {
+        "format": "free_text",
+        "text": "It is a set of steps to solve a problem."
+      }
+    },
+    {
+      "exercise": {
+        "type": "reasoning_question",
+        "instruction": "Обоснуйте ответ, используя слова по теме.",
+        "question_text": "Why are algorithms useful when writing code?",
+        "content": {
+          "format": "free_text",
+          "context": "An algorithm is a set of steps to solve a problem. A function is a block of code that does a task.",
+          "vocabulary": [
+            "algorithm",
+            "steps",
+            "problem",
+            "solution",
+            "code"
+          ]
+        },
+        "answer_key": {
+          "rubric": {
+            "criteria": [
+              "Объяснена польза последовательных шагов.",
+              "Есть связь с решением задачи.",
+              "Обоснование понятно и связано с темой."
+            ]
+          }
+        },
+        "explanation": "Допускаются разные аргументированные ответы по теме."
+      },
+      "response": {
+        "format": "free_text",
+        "text": "Algorithms break a problem into clear steps, which helps us write code for a solution."
+      }
+    }
+  ]
+}

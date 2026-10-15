@@ -1,0 +1,827 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Шаблоны заданий LingoWay v0.2",
+  "description": "Полный внутренний формат задания. answer_key и explanation приватны.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "vocabulary_gap",
+        "vocabulary_matching_translation",
+        "vocabulary_matching_definition",
+        "vocabulary_context_choice",
+        "grammar_brackets",
+        "grammar_tense",
+        "grammar_word_order",
+        "comprehension_question",
+        "reasoning_question"
+      ]
+    },
+    "instruction": {
+      "type": "string",
+      "minLength": 1
+    },
+    "question_text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content": {
+      "type": "object"
+    },
+    "answer_key": {
+      "type": "object"
+    },
+    "explanation": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "type",
+    "instruction",
+    "question_text",
+    "content",
+    "answer_key",
+    "explanation"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "vocabulary_gap",
+              "vocabulary_context_choice",
+              "grammar_brackets",
+              "grammar_tense"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "content": {
+            "$ref": "#/$defs/ChoiceContent"
+          },
+          "answer_key": {
+            "$ref": "#/$defs/ChoiceKey"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "vocabulary_matching_translation",
+              "vocabulary_matching_definition"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "content": {
+            "$ref": "#/$defs/MatchingContent"
+          },
+          "answer_key": {
+            "$ref": "#/$defs/MatchingKey"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "grammar_word_order"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "content": {
+            "$ref": "#/$defs/WordOrderContent"
+          },
+          "answer_key": {
+            "$ref": "#/$defs/WordOrderKey"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "comprehension_question",
+              "reasoning_question"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "content": {
+            "$ref": "#/$defs/FreeTextContent"
+          },
+          "answer_key": {
+            "$ref": "#/$defs/FreeTextKey"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Item": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "ChoiceContent": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "single_choice"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Item"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        }
+      },
+      "required": [
+        "format",
+        "options"
+      ],
+      "additionalProperties": false
+    },
+    "MatchingContent": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "matching"
+        },
+        "left_items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Item"
+          },
+          "minItems": 4,
+          "maxItems": 6
+        },
+        "right_items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Item"
+          },
+          "minItems": 4,
+          "maxItems": 6
+        }
+      },
+      "required": [
+        "format",
+        "left_items",
+        "right_items"
+      ],
+      "additionalProperties": false
+    },
+    "WordOrderContent": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "word_order"
+        },
+        "source_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_language": {
+          "const": "en"
+        },
+        "word_bank": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Item"
+          },
+          "minItems": 2,
+          "maxItems": 40
+        }
+      },
+      "required": [
+        "format",
+        "source_text",
+        "target_language",
+        "word_bank"
+      ],
+      "additionalProperties": false
+    },
+    "FreeTextContent": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "free_text"
+        },
+        "context": {
+          "type": "string",
+          "minLength": 1
+        },
+        "vocabulary": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 5,
+          "maxItems": 5,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "format",
+        "context"
+      ],
+      "additionalProperties": false
+    },
+    "Pair": {
+      "type": "object",
+      "properties": {
+        "left_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "right_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "left_id",
+        "right_id"
+      ],
+      "additionalProperties": false
+    },
+    "ChoiceKey": {
+      "type": "object",
+      "properties": {
+        "correct_choice_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "distractor_types": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "correct_choice_id"
+      ],
+      "additionalProperties": false
+    },
+    "MatchingKey": {
+      "type": "object",
+      "properties": {
+        "pairs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Pair"
+          },
+          "minItems": 4,
+          "maxItems": 6
+        }
+      },
+      "required": [
+        "pairs"
+      ],
+      "additionalProperties": false
+    },
+    "WordOrderKey": {
+      "type": "object",
+      "properties": {
+        "token_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 2,
+          "maxItems": 40,
+          "uniqueItems": true
+        },
+        "correct_translation": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "token_ids"
+      ],
+      "additionalProperties": false
+    },
+    "FreeTextKey": {
+      "type": "object",
+      "properties": {
+        "rubric": {
+          "type": "object",
+          "properties": {
+            "criteria": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1,
+              "maxItems": 10
+            },
+            "reference_answer": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "criteria"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "rubric"
+      ],
+      "additionalProperties": false
+    },
+    "ChoiceResponse": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "single_choice"
+        },
+        "choice_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "format",
+        "choice_id"
+      ],
+      "additionalProperties": false
+    },
+    "MatchingResponse": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "matching"
+        },
+        "pairs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Pair"
+          },
+          "minItems": 4,
+          "maxItems": 6
+        }
+      },
+      "required": [
+        "format",
+        "pairs"
+      ],
+      "additionalProperties": false
+    },
+    "WordOrderResponse": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "word_order"
+        },
+        "token_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 2,
+          "maxItems": 40,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "format",
+        "token_ids"
+      ],
+      "additionalProperties": false
+    },
+    "FreeTextResponse": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "free_text"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10000
+        }
+      },
+      "required": [
+        "format",
+        "text"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "type": "vocabulary_gap",
+      "instruction": "Выберите правильный вариант.",
+      "question_text": "The ___ is a set of steps to solve a problem.",
+      "content": {
+        "format": "single_choice",
+        "options": [
+          {
+            "id": "c1",
+            "text": "algorithm"
+          },
+          {
+            "id": "c2",
+            "text": "apple"
+          },
+          {
+            "id": "c3",
+            "text": "airport"
+          },
+          {
+            "id": "c4",
+            "text": "animal"
+          }
+        ]
+      },
+      "answer_key": {
+        "correct_choice_id": "c1"
+      },
+      "explanation": "Algorithm — последовательность шагов для решения задачи."
+    },
+    {
+      "type": "vocabulary_matching_translation",
+      "instruction": "Соедините слово с переводом.",
+      "question_text": "algorithm · database · variable · function",
+      "content": {
+        "format": "matching",
+        "left_items": [
+          {
+            "id": "w1",
+            "text": "algorithm"
+          },
+          {
+            "id": "w2",
+            "text": "database"
+          },
+          {
+            "id": "w3",
+            "text": "variable"
+          },
+          {
+            "id": "w4",
+            "text": "function"
+          }
+        ],
+        "right_items": [
+          {
+            "id": "r1",
+            "text": "переменная"
+          },
+          {
+            "id": "r2",
+            "text": "алгоритм"
+          },
+          {
+            "id": "r3",
+            "text": "функция"
+          },
+          {
+            "id": "r4",
+            "text": "база данных"
+          }
+        ]
+      },
+      "answer_key": {
+        "pairs": [
+          {
+            "left_id": "w1",
+            "right_id": "r2"
+          },
+          {
+            "left_id": "w2",
+            "right_id": "r4"
+          },
+          {
+            "left_id": "w3",
+            "right_id": "r1"
+          },
+          {
+            "left_id": "w4",
+            "right_id": "r3"
+          }
+        ]
+      },
+      "explanation": "Каждое слово соединяется ровно с одним соответствующим переводом или определением."
+    },
+    {
+      "type": "vocabulary_matching_definition",
+      "instruction": "Соедините слово с определением на английском.",
+      "question_text": "algorithm · database · variable · function",
+      "content": {
+        "format": "matching",
+        "left_items": [
+          {
+            "id": "w1",
+            "text": "algorithm"
+          },
+          {
+            "id": "w2",
+            "text": "database"
+          },
+          {
+            "id": "w3",
+            "text": "variable"
+          },
+          {
+            "id": "w4",
+            "text": "function"
+          }
+        ],
+        "right_items": [
+          {
+            "id": "r1",
+            "text": "a block of code that does a task"
+          },
+          {
+            "id": "r2",
+            "text": "a value that can change"
+          },
+          {
+            "id": "r3",
+            "text": "a collection of organized data"
+          },
+          {
+            "id": "r4",
+            "text": "a set of steps to solve a problem"
+          }
+        ]
+      },
+      "answer_key": {
+        "pairs": [
+          {
+            "left_id": "w1",
+            "right_id": "r4"
+          },
+          {
+            "left_id": "w2",
+            "right_id": "r3"
+          },
+          {
+            "left_id": "w3",
+            "right_id": "r2"
+          },
+          {
+            "left_id": "w4",
+            "right_id": "r1"
+          }
+        ]
+      },
+      "explanation": "Каждое слово соединяется ровно с одним соответствующим переводом или определением."
+    },
+    {
+      "type": "vocabulary_context_choice",
+      "instruction": "Выберите правильный вариант.",
+      "question_text": "The developer fixed a ___ in the code.",
+      "content": {
+        "format": "single_choice",
+        "options": [
+          {
+            "id": "c1",
+            "text": "keyboard"
+          },
+          {
+            "id": "c2",
+            "text": "bug"
+          },
+          {
+            "id": "c3",
+            "text": "cloud"
+          },
+          {
+            "id": "c4",
+            "text": "screen"
+          }
+        ]
+      },
+      "answer_key": {
+        "correct_choice_id": "c2"
+      },
+      "explanation": "Fix a bug означает исправить ошибку в программе. Остальные слова не обозначают ошибку."
+    },
+    {
+      "type": "grammar_brackets",
+      "instruction": "Выберите правильный вариант.",
+      "question_text": "She ___ (write) the function yesterday.",
+      "content": {
+        "format": "single_choice",
+        "options": [
+          {
+            "id": "c1",
+            "text": "write"
+          },
+          {
+            "id": "c2",
+            "text": "writes"
+          },
+          {
+            "id": "c3",
+            "text": "wrote"
+          },
+          {
+            "id": "c4",
+            "text": "written"
+          }
+        ]
+      },
+      "answer_key": {
+        "correct_choice_id": "c3"
+      },
+      "explanation": "Yesterday указывает на Past Simple. Прошедшая форма write — wrote."
+    },
+    {
+      "type": "grammar_tense",
+      "instruction": "Выберите правильный вариант.",
+      "question_text": "I ___ this database last year.",
+      "content": {
+        "format": "single_choice",
+        "options": [
+          {
+            "id": "c1",
+            "text": "created"
+          },
+          {
+            "id": "c2",
+            "text": "have created"
+          },
+          {
+            "id": "c3",
+            "text": "create"
+          },
+          {
+            "id": "c4",
+            "text": "will create"
+          }
+        ]
+      },
+      "answer_key": {
+        "correct_choice_id": "c1"
+      },
+      "explanation": "Last year обозначает завершённое время в прошлом, поэтому используется Past Simple: created."
+    },
+    {
+      "type": "grammar_word_order",
+      "instruction": "Составьте перевод; некоторые слова лишние.",
+      "question_text": "Я использую алгоритм для решения задач.",
+      "content": {
+        "format": "word_order",
+        "source_text": "Я использую алгоритм для решения задач.",
+        "target_language": "en",
+        "word_bank": [
+          {
+            "id": "t1",
+            "text": "problems"
+          },
+          {
+            "id": "t2",
+            "text": "I"
+          },
+          {
+            "id": "t3",
+            "text": "apple"
+          },
+          {
+            "id": "t4",
+            "text": "an"
+          },
+          {
+            "id": "t5",
+            "text": "solve"
+          },
+          {
+            "id": "t6",
+            "text": "algorithm"
+          },
+          {
+            "id": "t7",
+            "text": "airport"
+          },
+          {
+            "id": "t8",
+            "text": "to"
+          },
+          {
+            "id": "t9",
+            "text": "use"
+          }
+        ]
+      },
+      "answer_key": {
+        "token_ids": [
+          "t2",
+          "t9",
+          "t4",
+          "t6",
+          "t8",
+          "t5",
+          "t1"
+        ],
+        "correct_translation": "I use an algorithm to solve problems."
+      },
+      "explanation": "Порядок: подлежащее, сказуемое, дополнение и цель действия. Apple и airport не используются."
+    },
+    {
+      "type": "comprehension_question",
+      "instruction": "Ответьте по тексту.",
+      "question_text": "What is an algorithm?",
+      "content": {
+        "format": "free_text",
+        "context": "An algorithm is a set of steps to solve a problem. A function is a block of code that does a task."
+      },
+      "answer_key": {
+        "rubric": {
+          "criteria": [
+            "Ответ передаёт идею набора шагов.",
+            "Указана цель решения задачи."
+          ],
+          "reference_answer": "It is a set of steps to solve a problem."
+        }
+      },
+      "explanation": "Ответ нужно подтвердить смыслом исходного текста."
+    },
+    {
+      "type": "reasoning_question",
+      "instruction": "Обоснуйте ответ, используя слова по теме.",
+      "question_text": "Why are algorithms useful when writing code?",
+      "content": {
+        "format": "free_text",
+        "context": "An algorithm is a set of steps to solve a problem. A function is a block of code that does a task.",
+        "vocabulary": [
+          "algorithm",
+          "steps",
+          "problem",
+          "solution",
+          "code"
+        ]
+      },
+      "answer_key": {
+        "rubric": {
+          "criteria": [
+            "Объяснена польза последовательных шагов.",
+            "Есть связь с решением задачи.",
+            "Обоснование понятно и связано с темой."
+          ]
+        }
+      },
+      "explanation": "Допускаются разные аргументированные ответы по теме."
+    }
+  ]
+}

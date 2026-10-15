@@ -7,4 +7,5 @@ services:
     image: postgres:16
     environment:
       POSTGRES_PASSWORD: password
+      POSTGRES_DB: lingoway
     ports: ["5432:5432"]
