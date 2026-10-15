@@ -1,0 +1,3648 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "LingoWay — общая БД и API v0.2",
+    "version": "0.2.0",
+    "description": "Упрощённый проект API. Семь таблиц: users/topics/materials/modules/exercises/answers/llm_requests. Модуль непосредственно содержит задания; тема и CEFR наследуются. Все ID положительные bigint; UUID используется только как Idempotency-Key. Пользователь из JWT, без словаря и прогресса. Схема несовместима с прототипом v0.1 (UUID, exercise_sets, attempts/jobs). Сервер пока реализует только /api/health. Права, правила EXP и транзакции описаны для будущей реализации."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/me": {
+      "get": {
+        "operationId": "getMe",
+        "summary": "Текущий пользователь",
+        "description": "Базовая учётная запись без прогресса и словаря.",
+        "responses": {
+          "200": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/api/topics": {
+      "get": {
+        "operationId": "listTopics",
+        "summary": "Темы модулей",
+        "description": "Каталог тем.",
+        "responses": {
+          "200": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Topic"
+                      }
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "limit",
+                    "offset",
+                    "has_more"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ]
+      }
+    },
+    "/api/modules": {
+      "get": {
+        "operationId": "listModules",
+        "summary": "Доступные модули",
+        "description": "Свои модули любого статуса и публичные ready-модули. Приватные чужие модули исключены.",
+        "responses": {
+          "200": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Module"
+                      }
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "limit",
+                    "offset",
+                    "has_more"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "topic_id",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "difficulty",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Difficulty"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createModule",
+        "summary": "Создать пустой модуль",
+        "description": "Создаёт draft. Внутренний владелец определяется по JWT и не возвращается в Module. Публичные модули могут создавать teacher/admin; модуль с приватным материалом всегда private. Системные публичные модули без создателя создаются внутренним административным сервисом или начальным наполнением, не этим запросом.",
+        "responses": {
+          "201": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Module"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModuleCreate"
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/api/modules/{module_id}": {
+      "get": {
+        "operationId": "getModule",
+        "summary": "Прочитать модуль",
+        "description": "Свой модуль либо публичный ready-модуль; чужой ресурс возвращает 404.",
+        "responses": {
+          "200": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Module"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "editModule",
+        "summary": "Изменить метаданные черновика",
+        "description": "Только внутренний владелец; для системного модуля без создателя — admin. Только draft/failed. ready неизменяем. Тему и сложность наследуют все задания. generating возвращает 409 RESOURCE_BUSY.",
+        "responses": {
+          "200": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Module"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "topic_id": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 1
+                  },
+                  "difficulty": {
+                    "$ref": "#/components/schemas/Difficulty"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "minProperties": 1
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteModule",
+        "summary": "Удалить модуль",
+        "description": "Только внутренний владелец; для системного модуля без создателя — admin. Блокирует модуль и проверяет все связанные queued/running LLM-запросы и pending-ответы, иначе 409 RESOURCE_BUSY. Затем удаляет задания, ответы и запросы каскадно. Это намеренное удаление данных.",
+        "responses": {
+          "204": {
+            "description": "Успех."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/modules/{module_id}/exercises": {
+      "get": {
+        "operationId": "listExercises",
+        "summary": "Задания модуля",
+        "description": "Только ready-модуль, доступный текущему пользователю. Порядок position ASC. Ни answer_key, ни explanation не выдаются. level/topic_id вычисляются из модуля.",
+        "responses": {
+          "200": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Exercise"
+                      }
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "limit",
+                    "offset",
+                    "has_more"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createExercise",
+        "summary": "Добавить задание",
+        "description": "Только внутренний владелец; для системного модуля без создателя — admin. Только draft/failed. Позиция назначается сервером под блокировкой модуля. Проверяет полный внутренний шаблон, включая приватный ключ. Возвращает только публичную форму.",
+        "responses": {
+          "201": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Exercise"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExerciseCreate"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/modules/{module_id}/publish": {
+      "post": {
+        "operationId": "publishModule",
+        "summary": "Опубликовать модуль",
+        "description": "Только внутренний владелец; для системного модуля без создателя — admin. Проверяет минимум два задания, JSON-схемы, корректность ключей, определения, дистракторы и методологию EXP. Атомарно ready+published_at; повтор для ready возвращает текущий модуль. generating даёт 409.",
+        "responses": {
+          "200": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Module"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/exercises/{exercise_id}": {
+      "get": {
+        "operationId": "getExercise",
+        "summary": "Прочитать задание",
+        "description": "Публичная форма задания доступного ready-модуля. Эталоны и объяснение скрыты.",
+        "responses": {
+          "200": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Exercise"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/exercises/{exercise_id}/answers": {
+      "post": {
+        "operationId": "submitAnswer",
+        "summary": "Ответить на задание",
+        "description": "Формат должен соответствовать упражнению; ссылки ID и полнота проверяются сервером. Закрытые задания проверяются сразу (201). Открытые создают immutable answer+check_answer LLM-запрос (202). Проверенный ответ содержит feedback, но не полный ключ/рубрику. Новая попытка ответа — новый Idempotency-Key. Старый ключ и тот же вход возвращают ту же запись, другой вход — 409 IDEMPOTENCY_CONFLICT.",
+        "responses": {
+          "201": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Answer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "202": {
+            "description": "Открытый ответ принят; проверка через LLM.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerAccepted"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ]
+      }
+    },
+    "/api/answers/{answer_id}": {
+      "get": {
+        "operationId": "getAnswer",
+        "summary": "Результат ответа",
+        "description": "Только собственный ответ. score/is_correct/feedback доступны в checked; pending/failed не содержат частичных оценок. Это исходный ответ, а не агрегированный прогресс.",
+        "responses": {
+          "200": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Answer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "answer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/materials": {
+      "get": {
+        "operationId": "listMaterials",
+        "summary": "Свои материалы",
+        "description": "Чужие исходники не выдаются. В списке поле extracted_text отсутствует; полный текст доступен в detail.",
+        "responses": {
+          "200": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MaterialSummary"
+                      }
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "limit",
+                    "offset",
+                    "has_more"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createMaterial",
+        "summary": "Принять текст или URL",
+        "description": "Создаёт material pending+prepare_material запрос одной транзакцией. URL: только HTTP(S), проверка публичных DNS/IP и каждого редиректа, лимит объёма и времени, без исполнения JS. Повтор ключа с тем же исходным вводом возвращает тот же material и начальный LLM-запрос; другой ввод — 409.",
+        "responses": {
+          "202": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/TextMaterial"
+                  },
+                  {
+                    "$ref": "#/components/schemas/URLMaterial"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ]
+      }
+    },
+    "/api/materials/upload": {
+      "post": {
+        "operationId": "uploadMaterial",
+        "summary": "Загрузить документ или аудио",
+        "description": "Документ до 20 MiB (TXT/PDF/DOCX), аудио до 50 MiB (MP3/WAV/M4A/OGG). Поток проверяется по размеру/сигнатуре и сохраняется в приватное S3-хранилище. В БД object_key и SHA256; повтор сравнивает метаданные и хэш байтов. STT делает воркер. Отключённое аудио: 422 FEATURE_DISABLED до сохранения. Неудачная запись БД требует удаления незарегистрированного объекта.",
+        "responses": {
+          "202": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadMaterial"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ]
+      }
+    },
+    "/api/materials/{material_id}": {
+      "get": {
+        "operationId": "getMaterial",
+        "summary": "Прочитать свой материал",
+        "description": "В ready содержит текст и CEFR. Файлы/ключ объекта не публикуются.",
+        "responses": {
+          "200": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "material_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteMaterial",
+        "summary": "Удалить материал",
+        "description": "Только владелец. Под блокировками проверяет отсутствие queued/running запросов и pending ответов во всех связанных модулях, иначе 409 RESOURCE_BUSY. Удаляет модули/задания/ответы/запросы и объект в S3 с повторяемой компенсацией; предварительно сохраняет ключ объекта для очистки.",
+        "responses": {
+          "204": {
+            "description": "Успех."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "material_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/materials/{material_id}/process": {
+      "post": {
+        "operationId": "retryPreparation",
+        "summary": "Повторить подготовку материала",
+        "description": "Только failed с временной ошибкой. Новый ключ создаёт новый prepare_material запрос и переводит материал в pending; старый ключ возвращает предыдущую запись. Источник неизменяем. ready/активный запрос — 409.",
+        "responses": {
+          "202": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LLMRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "material_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ]
+      }
+    },
+    "/api/materials/{material_id}/modules": {
+      "post": {
+        "operationId": "generateModule",
+        "summary": "Сгенерировать модуль",
+        "description": "Только свой ready-материал. Атомарно создаёт private generating-модуль и generate_module запрос; до записи сначала ищет idempotency replay. count=2..30, не меньше числа уникальных типов. Распределение: floor(count/k) каждому типу, остаток первым типам в порядке запроса. Воркер валидирует все задания по шаблонам и методологии, затем одной транзакцией пишет упражнения+ready+успешный запрос. При ошибке модуль failed, частичные задания недоступны. Повтор для нового модуля — новый ключ.",
+        "responses": {
+          "202": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModuleAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateModule"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "material_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ]
+      }
+    },
+    "/api/llm-requests/{request_id}": {
+      "get": {
+        "operationId": "getLLMRequest",
+        "summary": "Состояние запроса LLM",
+        "description": "Только владелец с доступным целевым ресурсом. Поллинг раз в 2–3 секунды. Операция prepare_material может включать STT и извлечение текста без LLM-вызова. Всегда HTTP200 при существующем ресурсе, включая failed. Возвращает только статус, ссылки на целевые сущности и безопасную ошибку; параметры, модельные ключи и raw result скрыты.",
+        "responses": {
+          "200": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LLMRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/llm-requests/{request_id}/retry": {
+      "post": {
+        "operationId": "retryLLMRequest",
+        "summary": "Повторить неудачный запрос",
+        "description": "Только свой failed с retryable=true. Новый ключ создаёт новый запрос для того же ресурса с теми же parameters/prompt_version; исходная строка сохраняется. Ресурс переводится в pending/generating в той же транзакции. Запрет активной работы обеспечен уникальным индексом. Генерация повторяется в исходном failed-модуле с атомарной заменой черновых заданий. У ответа вход неизменяем. Неповторяемая ошибка — 409 RETRY_NOT_ALLOWED.",
+        "responses": {
+          "202": {
+            "description": "Успех.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LLMRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "Новый UUID на логическое действие. Материал: (owner,key), ответ: (user,key), LLM: (owner,operation,key). Без TTL. При повторе сравнивается исходный ввод; другой ввод даёт 409."
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Неверный формат запроса или ключа.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Необходим JWT.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Ресурс отсутствует или недоступен.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Недопустимое состояние, занятый ресурс или конфликт ключа.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Неверное содержание, формат ответа или ограничения шаблона.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "Обработчик фоновой работы временно недоступен.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Item": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "ChoiceContent": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "const": "single_choice"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "minItems": 4,
+            "maxItems": 4
+          }
+        },
+        "required": [
+          "format",
+          "options"
+        ],
+        "additionalProperties": false
+      },
+      "MatchingContent": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "const": "matching"
+          },
+          "left_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "minItems": 4,
+            "maxItems": 6
+          },
+          "right_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "minItems": 4,
+            "maxItems": 6
+          }
+        },
+        "required": [
+          "format",
+          "left_items",
+          "right_items"
+        ],
+        "additionalProperties": false
+      },
+      "WordOrderContent": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "const": "word_order"
+          },
+          "source_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target_language": {
+            "const": "en"
+          },
+          "word_bank": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "minItems": 2,
+            "maxItems": 40
+          }
+        },
+        "required": [
+          "format",
+          "source_text",
+          "target_language",
+          "word_bank"
+        ],
+        "additionalProperties": false
+      },
+      "FreeTextContent": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "const": "free_text"
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          },
+          "vocabulary": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 5,
+            "maxItems": 5,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "format",
+          "context"
+        ],
+        "additionalProperties": false
+      },
+      "Pair": {
+        "type": "object",
+        "properties": {
+          "left_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "right_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "left_id",
+          "right_id"
+        ],
+        "additionalProperties": false
+      },
+      "ChoiceKey": {
+        "type": "object",
+        "properties": {
+          "correct_choice_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "distractor_types": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "correct_choice_id"
+        ],
+        "additionalProperties": false
+      },
+      "MatchingKey": {
+        "type": "object",
+        "properties": {
+          "pairs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Pair"
+            },
+            "minItems": 4,
+            "maxItems": 6
+          }
+        },
+        "required": [
+          "pairs"
+        ],
+        "additionalProperties": false
+      },
+      "WordOrderKey": {
+        "type": "object",
+        "properties": {
+          "token_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 2,
+            "maxItems": 40,
+            "uniqueItems": true
+          },
+          "correct_translation": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "token_ids"
+        ],
+        "additionalProperties": false
+      },
+      "FreeTextKey": {
+        "type": "object",
+        "properties": {
+          "rubric": {
+            "type": "object",
+            "properties": {
+              "criteria": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "maxItems": 10
+              },
+              "reference_answer": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "criteria"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "rubric"
+        ],
+        "additionalProperties": false
+      },
+      "ChoiceResponse": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "const": "single_choice"
+          },
+          "choice_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "format",
+          "choice_id"
+        ],
+        "additionalProperties": false
+      },
+      "MatchingResponse": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "const": "matching"
+          },
+          "pairs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Pair"
+            },
+            "minItems": 4,
+            "maxItems": 6
+          }
+        },
+        "required": [
+          "format",
+          "pairs"
+        ],
+        "additionalProperties": false
+      },
+      "WordOrderResponse": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "const": "word_order"
+          },
+          "token_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 2,
+            "maxItems": 40,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "format",
+          "token_ids"
+        ],
+        "additionalProperties": false
+      },
+      "FreeTextResponse": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "const": "free_text"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          }
+        },
+        "required": [
+          "format",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "Difficulty": {
+        "type": "string",
+        "enum": [
+          "A1",
+          "A2",
+          "B1",
+          "B2",
+          "C1",
+          "C2"
+        ]
+      },
+      "ExerciseType": {
+        "type": "string",
+        "enum": [
+          "vocabulary_gap",
+          "vocabulary_matching_translation",
+          "vocabulary_matching_definition",
+          "vocabulary_context_choice",
+          "grammar_brackets",
+          "grammar_tense",
+          "grammar_word_order",
+          "comprehension_question",
+          "reasoning_question"
+        ]
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "student",
+              "teacher",
+              "admin"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role",
+          "created_at"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "id": 1,
+            "email": "student@example.com",
+            "name": "Анна",
+            "role": "student",
+            "created_at": "2026-10-15T10:00:00Z"
+          }
+        ]
+      },
+      "Topic": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "id": 1,
+            "slug": "it",
+            "name": "IT"
+          }
+        ]
+      },
+      "Module": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "topic_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "difficulty": {
+            "$ref": "#/components/schemas/Difficulty"
+          },
+          "material_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "private",
+              "public"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "generating",
+              "ready",
+              "failed"
+            ]
+          },
+          "exercise_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "published_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "topic_id",
+          "difficulty",
+          "material_id",
+          "visibility",
+          "status",
+          "exercise_count",
+          "created_at",
+          "published_at"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "ready"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "exercise_count": {
+                  "minimum": 2
+                },
+                "published_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "published_at": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ],
+        "examples": [
+          {
+            "id": 1,
+            "title": "Algorithms and code",
+            "topic_id": 1,
+            "difficulty": "B1",
+            "material_id": 1,
+            "visibility": "private",
+            "status": "ready",
+            "exercise_count": 9,
+            "created_at": "2026-10-15T10:00:00Z",
+            "published_at": "2026-10-15T10:01:00Z"
+          }
+        ],
+        "description": "Публичная форма модуля. Внутренний владелец не раскрывается; системный публичный модуль может не иметь создателя."
+      },
+      "ModuleCreate": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "topic_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "difficulty": {
+            "$ref": "#/components/schemas/Difficulty"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "private",
+              "public"
+            ],
+            "default": "private"
+          }
+        },
+        "required": [
+          "title",
+          "topic_id",
+          "difficulty"
+        ],
+        "additionalProperties": false
+      },
+      "GenerateModule": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "topic_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "difficulty": {
+            "$ref": "#/components/schemas/Difficulty"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 30
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExerciseType"
+            },
+            "minItems": 1,
+            "maxItems": 9,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "title",
+          "topic_id",
+          "difficulty",
+          "count",
+          "types"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "title": "Algorithms and code",
+            "topic_id": 1,
+            "difficulty": "B1",
+            "count": 9,
+            "types": [
+              "vocabulary_gap",
+              "vocabulary_matching_translation",
+              "vocabulary_matching_definition",
+              "vocabulary_context_choice",
+              "grammar_brackets",
+              "grammar_tense",
+              "grammar_word_order",
+              "comprehension_question",
+              "reasoning_question"
+            ]
+          }
+        ]
+      },
+      "Exercise": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "vocabulary_gap",
+              "vocabulary_matching_translation",
+              "vocabulary_matching_definition",
+              "vocabulary_context_choice",
+              "grammar_brackets",
+              "grammar_tense",
+              "grammar_word_order",
+              "comprehension_question",
+              "reasoning_question"
+            ]
+          },
+          "instruction": {
+            "type": "string",
+            "minLength": 1
+          },
+          "question_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "object"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "module_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "level": {
+            "$ref": "#/components/schemas/Difficulty"
+          },
+          "topic_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "type",
+          "instruction",
+          "question_text",
+          "content",
+          "id",
+          "module_id",
+          "position",
+          "level",
+          "topic_id"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "vocabulary_gap",
+                    "vocabulary_context_choice",
+                    "grammar_brackets",
+                    "grammar_tense"
+                  ]
+                }
+              },
+              "required": [
+                "type"
+              ]
+            },
+            "then": {
+              "properties": {
+                "content": {
+                  "$ref": "#/components/schemas/ChoiceContent"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "vocabulary_matching_translation",
+                    "vocabulary_matching_definition"
+                  ]
+                }
+              },
+              "required": [
+                "type"
+              ]
+            },
+            "then": {
+              "properties": {
+                "content": {
+                  "$ref": "#/components/schemas/MatchingContent"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "grammar_word_order"
+                  ]
+                }
+              },
+              "required": [
+                "type"
+              ]
+            },
+            "then": {
+              "properties": {
+                "content": {
+                  "$ref": "#/components/schemas/WordOrderContent"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "comprehension_question",
+                    "reasoning_question"
+                  ]
+                }
+              },
+              "required": [
+                "type"
+              ]
+            },
+            "then": {
+              "properties": {
+                "content": {
+                  "$ref": "#/components/schemas/FreeTextContent"
+                }
+              }
+            }
+          }
+        ],
+        "description": "Публичное задание. level и topic_id получены из модуля; ответ и объяснение не выдаются.",
+        "examples": [
+          {
+            "type": "vocabulary_gap",
+            "instruction": "Выберите правильный вариант.",
+            "question_text": "The ___ is a set of steps to solve a problem.",
+            "content": {
+              "format": "single_choice",
+              "options": [
+                {
+                  "id": "c1",
+                  "text": "algorithm"
+                },
+                {
+                  "id": "c2",
+                  "text": "apple"
+                },
+                {
+                  "id": "c3",
+                  "text": "airport"
+                },
+                {
+                  "id": "c4",
+                  "text": "animal"
+                }
+              ]
+            },
+            "id": 1,
+            "module_id": 1,
+            "position": 1,
+            "level": "B1",
+            "topic_id": 1
+          },
+          {
+            "type": "vocabulary_matching_translation",
+            "instruction": "Соедините слово с переводом.",
+            "question_text": "algorithm · database · variable · function",
+            "content": {
+              "format": "matching",
+              "left_items": [
+                {
+                  "id": "w1",
+                  "text": "algorithm"
+                },
+                {
+                  "id": "w2",
+                  "text": "database"
+                },
+                {
+                  "id": "w3",
+                  "text": "variable"
+                },
+                {
+                  "id": "w4",
+                  "text": "function"
+                }
+              ],
+              "right_items": [
+                {
+                  "id": "r1",
+                  "text": "переменная"
+                },
+                {
+                  "id": "r2",
+                  "text": "алгоритм"
+                },
+                {
+                  "id": "r3",
+                  "text": "функция"
+                },
+                {
+                  "id": "r4",
+                  "text": "база данных"
+                }
+              ]
+            },
+            "id": 2,
+            "module_id": 1,
+            "position": 2,
+            "level": "B1",
+            "topic_id": 1
+          },
+          {
+            "type": "vocabulary_matching_definition",
+            "instruction": "Соедините слово с определением на английском.",
+            "question_text": "algorithm · database · variable · function",
+            "content": {
+              "format": "matching",
+              "left_items": [
+                {
+                  "id": "w1",
+                  "text": "algorithm"
+                },
+                {
+                  "id": "w2",
+                  "text": "database"
+                },
+                {
+                  "id": "w3",
+                  "text": "variable"
+                },
+                {
+                  "id": "w4",
+                  "text": "function"
+                }
+              ],
+              "right_items": [
+                {
+                  "id": "r1",
+                  "text": "a block of code that does a task"
+                },
+                {
+                  "id": "r2",
+                  "text": "a value that can change"
+                },
+                {
+                  "id": "r3",
+                  "text": "a collection of organized data"
+                },
+                {
+                  "id": "r4",
+                  "text": "a set of steps to solve a problem"
+                }
+              ]
+            },
+            "id": 3,
+            "module_id": 1,
+            "position": 3,
+            "level": "B1",
+            "topic_id": 1
+          },
+          {
+            "type": "vocabulary_context_choice",
+            "instruction": "Выберите правильный вариант.",
+            "question_text": "The developer fixed a ___ in the code.",
+            "content": {
+              "format": "single_choice",
+              "options": [
+                {
+                  "id": "c1",
+                  "text": "keyboard"
+                },
+                {
+                  "id": "c2",
+                  "text": "bug"
+                },
+                {
+                  "id": "c3",
+                  "text": "cloud"
+                },
+                {
+                  "id": "c4",
+                  "text": "screen"
+                }
+              ]
+            },
+            "id": 4,
+            "module_id": 1,
+            "position": 4,
+            "level": "B1",
+            "topic_id": 1
+          },
+          {
+            "type": "grammar_brackets",
+            "instruction": "Выберите правильный вариант.",
+            "question_text": "She ___ (write) the function yesterday.",
+            "content": {
+              "format": "single_choice",
+              "options": [
+                {
+                  "id": "c1",
+                  "text": "write"
+                },
+                {
+                  "id": "c2",
+                  "text": "writes"
+                },
+                {
+                  "id": "c3",
+                  "text": "wrote"
+                },
+                {
+                  "id": "c4",
+                  "text": "written"
+                }
+              ]
+            },
+            "id": 5,
+            "module_id": 1,
+            "position": 5,
+            "level": "B1",
+            "topic_id": 1
+          },
+          {
+            "type": "grammar_tense",
+            "instruction": "Выберите правильный вариант.",
+            "question_text": "I ___ this database last year.",
+            "content": {
+              "format": "single_choice",
+              "options": [
+                {
+                  "id": "c1",
+                  "text": "created"
+                },
+                {
+                  "id": "c2",
+                  "text": "have created"
+                },
+                {
+                  "id": "c3",
+                  "text": "create"
+                },
+                {
+                  "id": "c4",
+                  "text": "will create"
+                }
+              ]
+            },
+            "id": 6,
+            "module_id": 1,
+            "position": 6,
+            "level": "B1",
+            "topic_id": 1
+          },
+          {
+            "type": "grammar_word_order",
+            "instruction": "Составьте перевод; некоторые слова лишние.",
+            "question_text": "Я использую алгоритм для решения задач.",
+            "content": {
+              "format": "word_order",
+              "source_text": "Я использую алгоритм для решения задач.",
+              "target_language": "en",
+              "word_bank": [
+                {
+                  "id": "t1",
+                  "text": "problems"
+                },
+                {
+                  "id": "t2",
+                  "text": "I"
+                },
+                {
+                  "id": "t3",
+                  "text": "apple"
+                },
+                {
+                  "id": "t4",
+                  "text": "an"
+                },
+                {
+                  "id": "t5",
+                  "text": "solve"
+                },
+                {
+                  "id": "t6",
+                  "text": "algorithm"
+                },
+                {
+                  "id": "t7",
+                  "text": "airport"
+                },
+                {
+                  "id": "t8",
+                  "text": "to"
+                },
+                {
+                  "id": "t9",
+                  "text": "use"
+                }
+              ]
+            },
+            "id": 7,
+            "module_id": 1,
+            "position": 7,
+            "level": "B1",
+            "topic_id": 1
+          },
+          {
+            "type": "comprehension_question",
+            "instruction": "Ответьте по тексту.",
+            "question_text": "What is an algorithm?",
+            "content": {
+              "format": "free_text",
+              "context": "An algorithm is a set of steps to solve a problem. A function is a block of code that does a task."
+            },
+            "id": 8,
+            "module_id": 1,
+            "position": 8,
+            "level": "B1",
+            "topic_id": 1
+          },
+          {
+            "type": "reasoning_question",
+            "instruction": "Обоснуйте ответ, используя слова по теме.",
+            "question_text": "Why are algorithms useful when writing code?",
+            "content": {
+              "format": "free_text",
+              "context": "An algorithm is a set of steps to solve a problem. A function is a block of code that does a task.",
+              "vocabulary": [
+                "algorithm",
+                "steps",
+                "problem",
+                "solution",
+                "code"
+              ]
+            },
+            "id": 9,
+            "module_id": 1,
+            "position": 9,
+            "level": "B1",
+            "topic_id": 1
+          }
+        ]
+      },
+      "ExerciseCreate": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "vocabulary_gap",
+              "vocabulary_matching_translation",
+              "vocabulary_matching_definition",
+              "vocabulary_context_choice",
+              "grammar_brackets",
+              "grammar_tense",
+              "grammar_word_order",
+              "comprehension_question",
+              "reasoning_question"
+            ]
+          },
+          "instruction": {
+            "type": "string",
+            "minLength": 1
+          },
+          "question_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "object"
+          },
+          "answer_key": {
+            "type": "object"
+          },
+          "explanation": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "type",
+          "instruction",
+          "question_text",
+          "content",
+          "answer_key",
+          "explanation"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "vocabulary_gap",
+                    "vocabulary_context_choice",
+                    "grammar_brackets",
+                    "grammar_tense"
+                  ]
+                }
+              },
+              "required": [
+                "type"
+              ]
+            },
+            "then": {
+              "properties": {
+                "content": {
+                  "$ref": "#/components/schemas/ChoiceContent"
+                },
+                "answer_key": {
+                  "$ref": "#/components/schemas/ChoiceKey"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "vocabulary_matching_translation",
+                    "vocabulary_matching_definition"
+                  ]
+                }
+              },
+              "required": [
+                "type"
+              ]
+            },
+            "then": {
+              "properties": {
+                "content": {
+                  "$ref": "#/components/schemas/MatchingContent"
+                },
+                "answer_key": {
+                  "$ref": "#/components/schemas/MatchingKey"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "grammar_word_order"
+                  ]
+                }
+              },
+              "required": [
+                "type"
+              ]
+            },
+            "then": {
+              "properties": {
+                "content": {
+                  "$ref": "#/components/schemas/WordOrderContent"
+                },
+                "answer_key": {
+                  "$ref": "#/components/schemas/WordOrderKey"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "comprehension_question",
+                    "reasoning_question"
+                  ]
+                }
+              },
+              "required": [
+                "type"
+              ]
+            },
+            "then": {
+              "properties": {
+                "content": {
+                  "$ref": "#/components/schemas/FreeTextContent"
+                },
+                "answer_key": {
+                  "$ref": "#/components/schemas/FreeTextKey"
+                }
+              }
+            }
+          }
+        ],
+        "description": "Создание задания в собственном неопубликованном модуле. Поля answer_key/explanation приватны.",
+        "examples": [
+          {
+            "type": "vocabulary_gap",
+            "instruction": "Выберите правильный вариант.",
+            "question_text": "The ___ is a set of steps to solve a problem.",
+            "content": {
+              "format": "single_choice",
+              "options": [
+                {
+                  "id": "c1",
+                  "text": "algorithm"
+                },
+                {
+                  "id": "c2",
+                  "text": "apple"
+                },
+                {
+                  "id": "c3",
+                  "text": "airport"
+                },
+                {
+                  "id": "c4",
+                  "text": "animal"
+                }
+              ]
+            },
+            "answer_key": {
+              "correct_choice_id": "c1"
+            },
+            "explanation": "Algorithm — последовательность шагов для решения задачи."
+          }
+        ]
+      },
+      "AnswerResponse": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ChoiceResponse"
+          },
+          {
+            "$ref": "#/components/schemas/MatchingResponse"
+          },
+          {
+            "$ref": "#/components/schemas/WordOrderResponse"
+          },
+          {
+            "$ref": "#/components/schemas/FreeTextResponse"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "format",
+          "mapping": {
+            "single_choice": "#/components/schemas/ChoiceResponse",
+            "matching": "#/components/schemas/MatchingResponse",
+            "word_order": "#/components/schemas/WordOrderResponse",
+            "free_text": "#/components/schemas/FreeTextResponse"
+          }
+        },
+        "examples": [
+          {
+            "format": "single_choice",
+            "choice_id": "c1"
+          },
+          {
+            "format": "matching",
+            "pairs": [
+              {
+                "left_id": "w1",
+                "right_id": "r2"
+              },
+              {
+                "left_id": "w2",
+                "right_id": "r4"
+              },
+              {
+                "left_id": "w3",
+                "right_id": "r1"
+              },
+              {
+                "left_id": "w4",
+                "right_id": "r3"
+              }
+            ]
+          },
+          {
+            "format": "matching",
+            "pairs": [
+              {
+                "left_id": "w1",
+                "right_id": "r4"
+              },
+              {
+                "left_id": "w2",
+                "right_id": "r3"
+              },
+              {
+                "left_id": "w3",
+                "right_id": "r2"
+              },
+              {
+                "left_id": "w4",
+                "right_id": "r1"
+              }
+            ]
+          },
+          {
+            "format": "single_choice",
+            "choice_id": "c2"
+          },
+          {
+            "format": "single_choice",
+            "choice_id": "c3"
+          },
+          {
+            "format": "single_choice",
+            "choice_id": "c1"
+          },
+          {
+            "format": "word_order",
+            "token_ids": [
+              "t2",
+              "t9",
+              "t4",
+              "t6",
+              "t8",
+              "t5",
+              "t1"
+            ]
+          },
+          {
+            "format": "free_text",
+            "text": "It is a set of steps to solve a problem."
+          },
+          {
+            "format": "free_text",
+            "text": "Algorithms break a problem into clear steps, which helps us write code for a solution."
+          }
+        ]
+      },
+      "AnswerInput": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/AnswerResponse"
+          }
+        },
+        "required": [
+          "response"
+        ],
+        "additionalProperties": false
+      },
+      "Answer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "exercise_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "response": {
+            "$ref": "#/components/schemas/AnswerResponse"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "checked",
+              "failed"
+            ]
+          },
+          "score": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "is_correct": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "feedback": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Failure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "checked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "exercise_id",
+          "response",
+          "status",
+          "score",
+          "is_correct",
+          "feedback",
+          "error",
+          "created_at",
+          "checked_at"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "checked"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "score": {
+                  "type": "number"
+                },
+                "is_correct": {
+                  "type": "boolean"
+                },
+                "feedback": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "checked_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "score": {
+                  "type": "null"
+                },
+                "is_correct": {
+                  "type": "null"
+                },
+                "feedback": {
+                  "type": "null"
+                },
+                "checked_at": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "failed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "error": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "error": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ],
+        "examples": [
+          {
+            "id": 1,
+            "exercise_id": 1,
+            "response": {
+              "format": "single_choice",
+              "choice_id": "c1"
+            },
+            "status": "checked",
+            "score": 1,
+            "is_correct": true,
+            "feedback": "Algorithm — последовательность шагов для решения задачи.",
+            "error": null,
+            "created_at": "2026-10-15T10:02:00Z",
+            "checked_at": "2026-10-15T10:02:00Z"
+          }
+        ]
+      },
+      "Failure": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "additionalProperties": false
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "LLMRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "prepare_material",
+              "generate_module",
+              "check_answer"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "material_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "module_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "answer_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "error": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Failure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "operation",
+          "status",
+          "material_id",
+          "module_id",
+          "answer_id",
+          "error",
+          "created_at",
+          "finished_at"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "failed",
+                    "succeeded"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "finished_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "finished_at": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "failed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "error": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "error": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "operation": {
+                  "const": "prepare_material"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "material_id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 1
+                },
+                "module_id": {
+                  "type": "null"
+                },
+                "answer_id": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "operation": {
+                  "const": "generate_module"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "material_id": {
+                  "type": "null"
+                },
+                "module_id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 1
+                },
+                "answer_id": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "operation": {
+                  "const": "check_answer"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "material_id": {
+                  "type": "null"
+                },
+                "module_id": {
+                  "type": "null"
+                },
+                "answer_id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 1
+                }
+              }
+            }
+          }
+        ],
+        "examples": [
+          {
+            "id": 2,
+            "operation": "generate_module",
+            "status": "succeeded",
+            "material_id": null,
+            "module_id": 1,
+            "answer_id": null,
+            "error": null,
+            "created_at": "2026-10-15T10:00:00Z",
+            "finished_at": "2026-10-15T10:01:00Z"
+          }
+        ]
+      },
+      "Material": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "topic_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "file",
+              "url",
+              "audio"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "failed"
+            ]
+          },
+          "level": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "A1",
+              "A2",
+              "B1",
+              "B2",
+              "C1",
+              "C2",
+              null
+            ]
+          },
+          "extracted_text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "topic_id",
+          "kind",
+          "status",
+          "level",
+          "extracted_text",
+          "created_at"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "ready"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "level": {
+                  "$ref": "#/components/schemas/Difficulty"
+                },
+                "extracted_text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200000
+                }
+              }
+            }
+          }
+        ],
+        "examples": [
+          {
+            "id": 1,
+            "title": "Algorithms",
+            "topic_id": 1,
+            "kind": "text",
+            "status": "ready",
+            "level": "B1",
+            "extracted_text": "An algorithm is a set of steps to solve a problem. A function is a block of code that does a task.",
+            "created_at": "2026-10-15T10:00:00Z"
+          }
+        ]
+      },
+      "MaterialSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "topic_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "file",
+              "url",
+              "audio"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "failed"
+            ]
+          },
+          "level": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "A1",
+              "A2",
+              "B1",
+              "B2",
+              "C1",
+              "C2",
+              null
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "topic_id",
+          "kind",
+          "status",
+          "level",
+          "created_at"
+        ],
+        "additionalProperties": false
+      },
+      "TextMaterial": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "const": "text"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200000
+          },
+          "topic_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "text"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "kind": "text",
+            "title": "Algorithms",
+            "text": "An algorithm is a set of steps to solve a problem. A function is a block of code that does a task.",
+            "topic_id": 1
+          }
+        ]
+      },
+      "URLMaterial": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "const": "url"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https?://"
+          },
+          "topic_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "UploadMaterial": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "file",
+              "audio"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "file": {
+            "type": "string",
+            "format": "binary"
+          },
+          "topic_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "file"
+        ],
+        "additionalProperties": false
+      },
+      "MaterialAccepted": {
+        "type": "object",
+        "properties": {
+          "material": {
+            "$ref": "#/components/schemas/Material"
+          },
+          "llm_request": {
+            "$ref": "#/components/schemas/LLMRequest"
+          }
+        },
+        "required": [
+          "material",
+          "llm_request"
+        ],
+        "additionalProperties": false
+      },
+      "ModuleAccepted": {
+        "type": "object",
+        "properties": {
+          "module": {
+            "$ref": "#/components/schemas/Module"
+          },
+          "llm_request": {
+            "$ref": "#/components/schemas/LLMRequest"
+          }
+        },
+        "required": [
+          "module",
+          "llm_request"
+        ],
+        "additionalProperties": false
+      },
+      "AnswerAccepted": {
+        "type": "object",
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/Answer"
+          },
+          "llm_request": {
+            "$ref": "#/components/schemas/LLMRequest"
+          }
+        },
+        "required": [
+          "answer",
+          "llm_request"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}
