@@ -13,7 +13,9 @@ import (
 
 	"lingoway/internal/config"
 	"lingoway/internal/database"
+	"lingoway/internal/generation"
 	"lingoway/internal/httpapi"
+	"lingoway/internal/materials"
 )
 
 func main() {
@@ -22,6 +24,8 @@ func main() {
 	}
 }
 
+// run связывает настройки, PostgreSQL, клиент LLM, фоновую очередь и HTTP-сервер.
+// Общий контекст отменяется при остановке приложения и завершает сетевую работу.
 func run() error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -51,10 +55,42 @@ func run() error {
 		}
 	}
 
+	// Отсутствие ключей LLM не мешает запуску сервера: чтение существующих
+	// материалов и извлечение текста остаются доступны в общем режиме.
+	cefrLevelClient, err := generation.NewCEFRLevelClient(cfg.LLM, nil)
+	if err != nil {
+		return fmt.Errorf("initialize LLM client: %w", err)
+	}
+	materialService := materials.NewMaterialService(db, cefrLevelClient)
+	preparationContext, stopMaterialPreparation := context.WithCancel(ctx)
+	preparationStopped := make(chan struct{})
+	if cefrLevelClient.HasAPIKeys() {
+		preparationWorker := materials.NewPreparationWorker(materialService, materials.PreparationWorkerOptions{
+			LLMRequestTimeout: cfg.LLM.Timeout, QueuePollInterval: cfg.LLM.PollInterval,
+			MaxPreparationAttempts: cfg.LLM.MaxAttempts,
+		})
+		go func() {
+			defer close(preparationStopped)
+			preparationWorker.RunUntilStopped(preparationContext)
+		}()
+	} else {
+		close(preparationStopped)
+		log.Print("LLM preparation disabled: configure LLM_API_KEYS")
+	}
+	// Сначала останавливаем воркер и ждём его выхода, затем закрываем пул БД.
+	// defer выполнится и при ошибке запуска HTTP-сервера; незавершённый запрос
+	// останется в очереди и будет восстановлен после истечения аренды.
+	defer func() {
+		stopMaterialPreparation()
+		<-preparationStopped
+	}()
+
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           httpapi.NewRouter(),
+		Handler:           httpapi.NewRouter(httpapi.RouterOptions{MaterialService: materialService}),
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
 	}
 	serverErrors := make(chan error, 1)
 	go func() {
