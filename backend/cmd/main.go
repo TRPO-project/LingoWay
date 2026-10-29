@@ -87,7 +87,7 @@ func run() error {
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           httpapi.NewRouter(httpapi.RouterOptions{MaterialService: materialService}),
+		Handler:           httpapi.NewRouter(db, httpapi.RouterOptions{MaterialService: materialService}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,

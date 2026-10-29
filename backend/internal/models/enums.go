@@ -91,3 +91,11 @@ const (
 	LLMSucceeded LLMStatus = "succeeded"
 	LLMFailed    LLMStatus = "failed"
 )
+
+// CatalogMaterialType — вид материала каталога: текст на сайте или ссылка на внешний сайт.
+type CatalogMaterialType string
+
+const (
+	CatalogText CatalogMaterialType = "text"
+	CatalogLink CatalogMaterialType = "link"
+)

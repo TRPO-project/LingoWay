@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // RouterOptions передаёт маршрутизатору зависимости обработчиков.
@@ -19,7 +20,9 @@ type RouterOptions struct {
 // NewRouter создаёт общий HTTP API без авторизации. Материалы и статусы запросов
 // доступны по ID. Без options работают health и предварительное извлечение текста;
 // создание и чтение материала требуют переданного сервиса.
-func NewRouter(options ...RouterOptions) *gin.Engine {
+// Подключение к БД передаётся отдельно для будущих обработчиков каталога.
+func NewRouter(database *gorm.DB, options ...RouterOptions) *gin.Engine {
+	_ = database
 	router := gin.Default()
 	// Не доверяем переданному клиентом X-Forwarded-For. При появлении обратного
 	// прокси его доверенные адреса нужно настроить явно.

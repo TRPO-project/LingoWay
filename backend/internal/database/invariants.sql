@@ -10,7 +10,7 @@
 -- SQL использует возможности PostgreSQL 16; PG18 NOT NULL constraints не экспортируются.
 
 -- Ordinal preserves UNIQUE -> CHECK -> FK dependency order.
--- Keep definitions as data so all 64 constraints share one idempotent installer.
+-- Keep definitions as data so all 72 constraints share one idempotent installer.
 DO $$
 DECLARE
     constraint_record record;
@@ -144,7 +144,23 @@ BEGIN
         (63, 'modules', 'modules_material_id_created_by_user_id_fkey',
             $ddl$FOREIGN KEY (material_id, created_by_user_id) REFERENCES public.materials(id, owner_user_id) ON DELETE CASCADE$ddl$),
         (64, 'modules', 'modules_topic_id_fkey',
-            $ddl$FOREIGN KEY (topic_id) REFERENCES public.topics(id)$ddl$)
+            $ddl$FOREIGN KEY (topic_id) REFERENCES public.topics(id)$ddl$),
+        (65, 'catalog_materials', 'catalog_materials_type_check',
+            $ddl$CHECK (type = ANY (ARRAY['text'::text, 'link'::text]))$ddl$),
+        (66, 'catalog_materials', 'catalog_materials_level_check',
+            $ddl$CHECK (level = ANY (ARRAY['A1'::text, 'A2'::text, 'B1'::text, 'B2'::text, 'C1'::text, 'C2'::text]))$ddl$),
+        (67, 'catalog_materials', 'catalog_materials_title_check',
+            $ddl$CHECK (length(btrim(title)) >= 1 AND length(btrim(title)) <= 200)$ddl$),
+        (68, 'catalog_materials', 'catalog_materials_description_check',
+            $ddl$CHECK (description IS NULL OR length(description) <= 500)$ddl$),
+        (69, 'catalog_materials', 'catalog_materials_content_check',
+            $ddl$CHECK (type = 'text'::text AND body IS NOT NULL AND length(btrim(body)) > 0 AND length(body) <= 100000 AND url IS NULL OR type = 'link'::text AND url IS NOT NULL AND length(url) <= 2048 AND url ~ '^https?://[^[:space:]]+$'::text AND body IS NULL)$ddl$),
+        (70, 'catalog_materials', 'catalog_materials_topic_id_fkey',
+            $ddl$FOREIGN KEY (topic_id) REFERENCES public.topics(id)$ddl$),
+        (71, 'catalog_material_favorites', 'catalog_material_favorites_user_id_fkey',
+            $ddl$FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE$ddl$),
+        (72, 'catalog_material_favorites', 'catalog_material_favorites_material_id_fkey',
+            $ddl$FOREIGN KEY (material_id) REFERENCES public.catalog_materials(id) ON DELETE CASCADE$ddl$)
         ) AS definitions(ordinal, table_name, constraint_name, definition)
         ORDER BY ordinal
     LOOP
@@ -350,3 +366,13 @@ BEGIN
     END IF;
 END
 $$;
+
+-- migrate:statement
+
+-- Standalone index: catalog_materials_topic_level_idx
+CREATE INDEX IF NOT EXISTS catalog_materials_topic_level_idx ON public.catalog_materials USING btree (topic_id, level, id DESC);
+
+-- migrate:statement
+
+-- Standalone index: catalog_favorites_material_idx
+CREATE INDEX IF NOT EXISTS catalog_favorites_material_idx ON public.catalog_material_favorites USING btree (material_id);

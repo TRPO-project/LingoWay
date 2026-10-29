@@ -370,7 +370,7 @@ curl.exe -X POST http://localhost:8080/api/materials/extract -F "file=@material.
 | [`backend/cmd/main.go`](../backend/cmd/main.go) | Настройки, БД, миграции, запуск клиента, сервиса, воркера и HTTP |
 | [`backend/internal/config/config.go`](../backend/internal/config/config.go) | Загрузка окружения и общие параметры |
 | [`backend/internal/config/llm.go`](../backend/internal/config/llm.go) | Проверка параметров провайдера и ограничений |
-| [`backend/internal/httpapi/router.go`](../backend/internal/httpapi/router.go) | Регистрация маршрутов без проверки пользователя |
+| [`backend/internal/httpapi/router.go`](../backend/internal/httpapi/router.go) | Регистрация маршрутов без проверки пользователя; принимает сервис материалов и подключение БД для будущих обработчиков каталога |
 | [`backend/internal/httpapi/material_handlers.go`](../backend/internal/httpapi/material_handlers.go) | HTTP-ввод, вызов сервиса и предварительный импорт |
 | [`backend/internal/httpapi/material_http_responses.go`](../backend/internal/httpapi/material_http_responses.go) | DTO, известные коды и безопасные описания ошибок |
 | [`backend/internal/materials/material_service.go`](../backend/internal/materials/material_service.go) | Создание материала и запроса, общий технический владелец, идемпотентность, чтение по ID |
