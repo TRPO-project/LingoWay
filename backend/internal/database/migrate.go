@@ -44,6 +44,7 @@ func Migrate(ctx context.Context, db *gorm.DB) error {
 		if err := tx.AutoMigrate(
 			&users.User{}, &topics.Topic{}, &llm.Material{}, &topics.Module{},
 			&topics.Exercise{}, &llm.Answer{}, &llm.LLMRequest{},
+			&topics.CatalogMaterial{}, &topics.CatalogMaterialFavorite{},
 		); err != nil {
 			return fmt.Errorf("auto-migrate models: %w", err)
 		}
@@ -64,6 +65,9 @@ func Migrate(ctx context.Context, db *gorm.DB) error {
 			if err := tx.Exec(statement).Error; err != nil {
 				return fmt.Errorf("apply database invariant %d: %w", index+1, err)
 			}
+		}
+		if err := seedTopics(tx); err != nil {
+			return err
 		}
 		return nil
 	})
