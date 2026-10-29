@@ -4,9 +4,13 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-func NewRouter() *gin.Engine {
+// NewRouter собирает маршруты. Подключение к БД пока не используется:
+// его получат обработчики следующих задач (каталог материалов и другие).
+func NewRouter(db *gorm.DB) *gin.Engine {
+	_ = db
 	r := gin.Default()
 
 	api := r.Group("/api")
