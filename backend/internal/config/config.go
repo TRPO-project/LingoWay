@@ -10,11 +10,13 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Config объединяет настройки приложения. Значения загружаются один раз при старте;
+// после изменения окружения сервер нужно перезапустить.
 type Config struct {
 	Port        string
 	DatabaseURL string
 	Database    DatabaseConfig
-	JWTSecret   string
+	LLM         LLMConfig // Подключение к модели и ограничения фоновой подготовки материала.
 }
 
 // DatabaseConfig настраивает пул PostgreSQL и ограничивает время старта сервера.
@@ -43,7 +45,6 @@ func fromEnvironment() (Config, error) {
 	cfg := Config{
 		Port:        getenv("PORT", "8080"),
 		DatabaseURL: strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		JWTSecret:   os.Getenv("JWT_SECRET"),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
@@ -71,6 +72,9 @@ func fromEnvironment() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.Database.MigrationTimeout, err = envDuration("DB_MIGRATION_TIMEOUT", time.Minute); err != nil {
+		return Config{}, err
+	}
+	if cfg.LLM, err = loadLLMConfig(); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil

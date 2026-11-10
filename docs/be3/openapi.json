@@ -3,7 +3,7 @@
   "info": {
     "title": "LingoWay — общая БД и API v0.2",
     "version": "0.2.0",
-    "description": "Упрощённый проект API. Семь таблиц: users/topics/materials/modules/exercises/answers/llm_requests. Модуль непосредственно содержит задания; тема и CEFR наследуются. Все ID положительные bigint; UUID используется только как Idempotency-Key. Пользователь из JWT, без словаря и прогресса. Схема несовместима с прототипом v0.1 (UUID, exercise_sets, attempts/jobs). Сервер пока реализует только /api/health. Права, правила EXP и транзакции описаны для будущей реализации."
+    "description": "Общая схема API v0.2. Реализованы health, создание текстового материала, предварительный импорт TXT/MD/DOCX, чтение материала и статуса LLM. Для каждой операции x-implemented показывает доступность. Реализованные операции материалов временно работают без проверки пользователя и JWT: ресурсы доступны по ID, ключ идемпотентности общий. Остальные операции описывают будущую реализацию и сохраняют проектируемую JWT-авторизацию. Все ID положительные bigint; UUID используется как Idempotency-Key. Подготовка материала определяет CEFR; генерация упражнений пока не подключена. Устройство реализации и ограничения: [LLM_MATERIALS.md](../LLM_MATERIALS.md)."
   },
   "servers": [
     {
@@ -56,7 +56,8 @@
             "$ref": "#/components/responses/ValidationError"
           }
         },
-        "parameters": []
+        "parameters": [],
+        "x-implemented": false
       }
     },
     "/api/topics": {
@@ -143,7 +144,8 @@
               "default": 0
             }
           }
-        ]
+        ],
+        "x-implemented": false
       }
     },
     "/api/modules": {
@@ -246,7 +248,8 @@
               "$ref": "#/components/schemas/Difficulty"
             }
           }
-        ]
+        ],
+        "x-implemented": false
       },
       "post": {
         "operationId": "createModule",
@@ -297,7 +300,8 @@
             }
           }
         },
-        "parameters": []
+        "parameters": [],
+        "x-implemented": false
       }
     },
     "/api/modules/{module_id}": {
@@ -351,7 +355,8 @@
               "minimum": 1
             }
           }
-        ]
+        ],
+        "x-implemented": false
       },
       "patch": {
         "operationId": "editModule",
@@ -431,7 +436,8 @@
               "minimum": 1
             }
           }
-        ]
+        ],
+        "x-implemented": false
       },
       "delete": {
         "operationId": "deleteModule",
@@ -468,7 +474,8 @@
               "minimum": 1
             }
           }
-        ]
+        ],
+        "x-implemented": false
       }
     },
     "/api/modules/{module_id}/exercises": {
@@ -565,7 +572,8 @@
               "default": 0
             }
           }
-        ]
+        ],
+        "x-implemented": false
       },
       "post": {
         "operationId": "createExercise",
@@ -627,7 +635,8 @@
               "minimum": 1
             }
           }
-        ]
+        ],
+        "x-implemented": false
       }
     },
     "/api/modules/{module_id}/publish": {
@@ -681,7 +690,8 @@
               "minimum": 1
             }
           }
-        ]
+        ],
+        "x-implemented": false
       }
     },
     "/api/exercises/{exercise_id}": {
@@ -735,7 +745,8 @@
               "minimum": 1
             }
           }
-        ]
+        ],
+        "x-implemented": false
       }
     },
     "/api/exercises/{exercise_id}/answers": {
@@ -820,7 +831,8 @@
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           }
-        ]
+        ],
+        "x-implemented": false
       }
     },
     "/api/answers/{answer_id}": {
@@ -874,7 +886,8 @@
               "minimum": 1
             }
           }
-        ]
+        ],
+        "x-implemented": false
       }
     },
     "/api/materials": {
@@ -961,12 +974,13 @@
               "default": 0
             }
           }
-        ]
+        ],
+        "x-implemented": false
       },
       "post": {
         "operationId": "createMaterial",
-        "summary": "Принять текст или URL",
-        "description": "Создаёт material pending+prepare_material запрос одной транзакцией. URL: только HTTP(S), проверка публичных DNS/IP и каждого редиректа, лимит объёма и времени, без исполнения JS. Повтор ключа с тем же исходным вводом возвращает тот же material и начальный LLM-запрос; другой ввод — 409.",
+        "summary": "Принять текст для подготовки",
+        "description": "Реализован только kind=text, до 20000 символов UTF-8 после нормализации. Временно без проверки пользователя и JWT. Создаёт material pending и prepare_material одной транзакцией. UUID Idempotency-Key обязателен и общий для всех вызовов: тот же нормализованный ввод возвращает первоначальные ресурсы, другой ввод — 409. Без LLM_API_KEYS новое создание возвращает 503 SERVICE_UNAVAILABLE; повтор ранее созданной пары с тем же ключом и вводом доступен. URL и сохранение бинарных источников пока не реализованы. Подробности: [LLM_MATERIALS.md](../LLM_MATERIALS.md).",
         "responses": {
           "202": {
             "description": "Успех.",
@@ -989,9 +1003,6 @@
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -1000,6 +1011,18 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           }
         },
         "requestBody": {
@@ -1007,23 +1030,25 @@
           "content": {
             "application/json": {
               "schema": {
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/TextMaterial"
-                  },
-                  {
-                    "$ref": "#/components/schemas/URLMaterial"
-                  }
-                ]
+                "$ref": "#/components/schemas/TextMaterial"
               }
             }
           }
         },
         "parameters": [
           {
-            "$ref": "#/components/parameters/IdempotencyKey"
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Общий UUID на логическое создание материала, без привязки к пользователю и без TTL. Повтор того же нормализованного ввода возвращает ту же пару материала и запроса; другое содержимое с тем же ключом даёт 409."
           }
-        ]
+        ],
+        "x-implemented": true,
+        "security": []
       }
     },
     "/api/materials/upload": {
@@ -1080,14 +1105,15 @@
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           }
-        ]
+        ],
+        "x-implemented": false
       }
     },
     "/api/materials/{material_id}": {
       "get": {
         "operationId": "getMaterial",
-        "summary": "Прочитать свой материал",
-        "description": "В ready содержит текст и CEFR. Файлы/ключ объекта не публикуются.",
+        "summary": "Прочитать материал по ID",
+        "description": "Временно без проверки пользователя и JWT. Любой существующий материал доступен по material_id, проверки владельца нет; отсутствующий ID даёт 404. В ready содержит подготовленный текст и CEFR. Файлы и ключ объекта не публикуются. Подробности: [LLM_MATERIALS.md](../LLM_MATERIALS.md).",
         "responses": {
           "200": {
             "description": "Успех.",
@@ -1110,9 +1136,6 @@
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -1121,6 +1144,12 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "parameters": [
@@ -1134,7 +1163,9 @@
               "minimum": 1
             }
           }
-        ]
+        ],
+        "x-implemented": true,
+        "security": []
       },
       "delete": {
         "operationId": "deleteMaterial",
@@ -1171,7 +1202,8 @@
               "minimum": 1
             }
           }
-        ]
+        ],
+        "x-implemented": false
       }
     },
     "/api/materials/{material_id}/process": {
@@ -1228,7 +1260,8 @@
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           }
-        ]
+        ],
+        "x-implemented": false
       }
     },
     "/api/materials/{material_id}/modules": {
@@ -1298,14 +1331,15 @@
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           }
-        ]
+        ],
+        "x-implemented": false
       }
     },
     "/api/llm-requests/{request_id}": {
       "get": {
         "operationId": "getLLMRequest",
         "summary": "Состояние запроса LLM",
-        "description": "Только владелец с доступным целевым ресурсом. Поллинг раз в 2–3 секунды. Операция prepare_material может включать STT и извлечение текста без LLM-вызова. Всегда HTTP200 при существующем ресурсе, включая failed. Возвращает только статус, ссылки на целевые сущности и безопасную ошибку; параметры, модельные ключи и raw result скрыты.",
+        "description": "Временно без проверки пользователя и JWT. Любой существующий запрос доступен по request_id, проверки владельца нет; отсутствующий ID даёт 404. Поллинг раз в 2–3 секунды; HTTP 200 также при failed. Возвращает статус, целевые ID и безопасную ошибку (code, message, retryable). Автоматические повторы timeout/429/5xx ограничены LLM_MAX_ATTEMPTS. Параметры, provider/model, исходный ввод и raw result скрыты. Подробности: [LLM_MATERIALS.md](../LLM_MATERIALS.md).",
         "responses": {
           "200": {
             "description": "Успех.",
@@ -1328,9 +1362,6 @@
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -1339,6 +1370,12 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "parameters": [
@@ -1352,7 +1389,9 @@
               "minimum": 1
             }
           }
-        ]
+        ],
+        "x-implemented": true,
+        "security": []
       }
     },
     "/api/llm-requests/{request_id}/retry": {
@@ -1409,7 +1448,118 @@
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           }
-        ]
+        ],
+        "x-implemented": false
+      }
+    },
+    "/api/materials/extract": {
+      "post": {
+        "operationId": "extractMaterialText",
+        "summary": "Предварительно извлечь текст из TXT, MD или DOCX",
+        "description": "Временно без проверки пользователя и JWT. Ровно одно multipart-поле file до 2 МиБ. UTF-8 TXT/MD либо DOCX; word/document.xml до 8 МиБ; извлечённый текст до 20000 символов. Файл не сохраняется. После проверки отправьте текст в POST /api/materials как kind=text. Idempotency-Key не нужен, записи и вызовы LLM не создаются. Подробности: [LLM_MATERIALS.md](../LLM_MATERIALS.md).",
+        "x-implemented": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Извлечённый текст без сохранения источника.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 20000
+                    },
+                    "characters": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 20000
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "characters"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "Проверка доступности HTTP",
+        "x-implemented": true,
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "HTTP-сервер запущен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -1486,6 +1636,36 @@
       },
       "ServiceUnavailable": {
         "description": "Обработчик фоновой работы временно недоступен.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "Материал или тело запроса превышает лимит.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "Неподдерживаемый формат запроса или файла.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Внутренняя ошибка; ответ не содержит данных провайдера или базы.",
         "content": {
           "application/json": {
             "schema": {
@@ -3511,7 +3691,7 @@
           "text": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200000
+            "maxLength": 20000
           },
           "topic_id": {
             "type": "integer",
