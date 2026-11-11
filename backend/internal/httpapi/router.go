@@ -34,7 +34,7 @@ func NewRouter(database *gorm.DB, options ...RouterOptions) *gin.Engine {
 	api.GET("/health", func(requestContext *gin.Context) {
 		requestContext.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
-  authHandler := NewAuthHandler(database)
+	authHandler := NewAuthHandler(database)
 
 	authGroup := api.Group("/auth")
 	{
@@ -53,6 +53,7 @@ func NewRouter(database *gorm.DB, options ...RouterOptions) *gin.Engine {
 			})
 		})
 
+		registerCatalogRoutes(protected, database)
 		admin := protected.Group("/admin")
 		admin.Use(middleware.RequireRole(users.RoleAdmin))
 		{
