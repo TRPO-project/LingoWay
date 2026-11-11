@@ -60,6 +60,7 @@ func NewRouter(database *gorm.DB, options ...RouterOptions) *gin.Engine {
 			admin.GET("/dashboard", func(c *gin.Context) {
 				c.JSON(http.StatusOK, gin.H{"message": "Admin panel"})
 			})
+			registerAdminCatalogRoutes(admin, database)
 		}
 	}
 	var routerOptions RouterOptions
