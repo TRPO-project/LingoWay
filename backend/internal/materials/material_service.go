@@ -31,11 +31,11 @@ var (
 
 var idempotencyKeyPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// CEFRLevelDetector определяет уровень английского текста, не изменяя сам текст.
+// CEFRLevelDetector определяет уровень английского текста по версии инструкции из очереди.
 // Интерфейс отделяет подготовку материала от протокола конкретного провайдера.
 type CEFRLevelDetector interface {
 	HasAPIKeys() bool
-	DetectCEFRLevel(context.Context, string) (models.CEFRLevel, error)
+	DetectCEFRLevel(ctx context.Context, sourceText, promptVersion string) (models.CEFRLevel, error)
 	ProviderName() string
 	ModelName() string
 }

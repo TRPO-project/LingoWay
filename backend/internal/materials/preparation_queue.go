@@ -74,7 +74,7 @@ func (worker *PreparationWorker) savePreparationOutcome(ctx context.Context, cla
 			return markMaterialPreparationSucceeded(transaction, activeRequest, detectedLevel)
 		}
 		if generation.IsRetryableProviderError(detectionErr) && activeRequest.AttemptCount < worker.options.MaxPreparationAttempts {
-			return requeuePreparationRequest(transaction, activeRequest)
+			return requeuePreparationRequest(transaction, activeRequest, generation.ProviderRetryDelay(detectionErr))
 		}
 		return markMaterialPreparationFailed(transaction, activeRequest, detectionErr)
 	})
@@ -94,8 +94,8 @@ func lockPreparationRequestWithActiveLease(transaction *gorm.DB, claimedRequest 
 	return &activeRequest, nil
 }
 
-func requeuePreparationRequest(transaction *gorm.DB, activeRequest *llm.LLMRequest) error {
-	retryDelay := calculatePreparationRetryDelay(activeRequest.AttemptCount)
+func requeuePreparationRequest(transaction *gorm.DB, activeRequest *llm.LLMRequest, providerDelay time.Duration) error {
+	retryDelay := max(calculatePreparationRetryDelay(activeRequest.AttemptCount), providerDelay)
 	return updatePreparationRequestWithActiveLease(transaction, activeRequest, map[string]any{
 		"status": models.LLMQueued, "lease_token": nil, "lease_expires_at": nil,
 		"available_at": gorm.Expr("clock_timestamp() + (? * interval '1 second')", retryDelay.Seconds()),

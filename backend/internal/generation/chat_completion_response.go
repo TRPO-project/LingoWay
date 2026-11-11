@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"lingoway/internal/models"
 )
@@ -14,12 +15,20 @@ import (
 // ко всему HTTP-ответу провайдера и ограничивает объём чтения в память.
 const maxProviderResponseBytes = 64 << 10
 
+// Ограничиваем подсказку провайдера сутками, чтобы ошибочный заголовок
+// не отложил повтор на неопределённо долгий срок.
+const maxProviderRetryDelay = 24 * time.Hour
+
 // readCEFRLevelResponse проверяет HTTP-статус и объём ответа, затем последовательно
 // разбирает оболочку Chat Completions и строгий JSON с результатом определения CEFR.
 func readCEFRLevelResponse(ctx context.Context, httpResponse *http.Response) (models.CEFRLevel, error) {
 	if httpResponse.StatusCode < 200 || httpResponse.StatusCode >= 300 {
 		// Тело ошибки не читаем: оно может повторять материал или служебные данные.
-		return "", classifyProviderHTTPStatus(httpResponse.StatusCode)
+		providerError := classifyProviderHTTPStatus(httpResponse.StatusCode)
+		if providerError.Retryable {
+			providerError.RetryAfter = parseProviderRetryAfter(httpResponse.Header.Get("Retry-After"), time.Now())
+		}
+		return "", providerError
 	}
 	// Дополнительный байт отличает ответ ровно на границе лимита от слишком
 	// большого ответа, который иначе выглядел бы просто обрезанным.
@@ -48,6 +57,34 @@ func classifyProviderHTTPStatus(statusCode int) *LLMProviderError {
 	default:
 		return &LLMProviderError{Code: "LLM_PROVIDER_ERROR"}
 	}
+}
+
+func parseProviderRetryAfter(headerValue string, now time.Time) time.Duration {
+	headerValue = strings.Trim(headerValue, " \t")
+	if headerValue == "" {
+		return 0
+	}
+	// Допустимые HTTP-даты начинаются с дня недели, а задержка в секундах
+	// начинается с цифры и состоит только из цифр ASCII.
+	if headerValue[0] < '0' || headerValue[0] > '9' {
+		retryTime, err := http.ParseTime(headerValue)
+		if err != nil || !retryTime.After(now) {
+			return 0
+		}
+		return min(retryTime.Sub(now), maxProviderRetryDelay)
+	}
+	const maxSeconds = int(maxProviderRetryDelay / time.Second)
+	seconds := 0
+	for index := range len(headerValue) {
+		digit := headerValue[index]
+		if digit < '0' || digit > '9' {
+			return 0
+		}
+		// Ограничиваем число на каждом шаге, чтобы не переполнить его даже
+		// на очень длинном значении. Оставшиеся символы всё равно проверяем.
+		seconds = min(seconds*10+int(digit-'0'), maxSeconds)
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 // parseChatCompletionContent принимает один ответ модели без отказа или признака

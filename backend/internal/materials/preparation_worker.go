@@ -94,15 +94,12 @@ func (worker *PreparationWorker) ProcessNextPreparationRequest(ctx context.Conte
 }
 
 func (worker *PreparationWorker) detectMaterialCEFRLevel(ctx context.Context, request *llm.LLMRequest, material *llm.Material) (models.CEFRLevel, error) {
-	if request.PromptVersion != generation.CEFRDetectionPromptVersion {
-		return "", &generation.LLMProviderError{Code: "LLM_PROMPT_UNSUPPORTED"}
-	}
 	if material.SourceText == nil || material.Kind != models.MaterialText {
 		return "", &generation.LLMProviderError{Code: "MATERIAL_UNSUPPORTED"}
 	}
 	llmCallContext, cancelLLMCall := context.WithTimeout(ctx, worker.options.LLMRequestTimeout)
 	defer cancelLLMCall()
-	detectedLevel, err := worker.materialService.levelDetector.DetectCEFRLevel(llmCallContext, *material.SourceText)
+	detectedLevel, err := worker.materialService.levelDetector.DetectCEFRLevel(llmCallContext, *material.SourceText, request.PromptVersion)
 	if err != nil {
 		return "", err
 	}

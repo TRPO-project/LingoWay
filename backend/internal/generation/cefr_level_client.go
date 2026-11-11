@@ -17,16 +17,23 @@ import (
 	"lingoway/internal/models"
 )
 
-// CEFRDetectionPromptVersion связывает запрос очереди с конкретной версией
-// инструкции и формата результата. Эти файлы встраиваются в приложение.
-const CEFRDetectionPromptVersion = "prepare-material-v1"
+const (
+	cefrDetectionPromptVersionV1 = "prepare-material-v1"
+	cefrDetectionPromptVersionV2 = "prepare-material-v2"
+	// CEFRDetectionPromptVersion записывается в новые запросы очереди.
+	// Для существующих запросов клиент выбирает инструкцию по сохранённой версии.
+	CEFRDetectionPromptVersion = cefrDetectionPromptVersionV2
+)
 
 // Это верхний предел текста в общем слое интеграции и в БД. Приём материалов
 // устанавливает более строгий лимит для текущего этапа приложения.
 const maxCEFRMaterialCharacters = 200000
 
 //go:embed prompts/prepare-material-v1.txt
-var cefrDetectionPrompt string
+var cefrDetectionPromptV1 string
+
+//go:embed prompts/prepare-material-v2.txt
+var cefrDetectionPromptV2 string
 
 //go:embed schemas/prepare-material-v1.json
 var cefrDetectionSchema string
@@ -38,6 +45,9 @@ type LLMProviderError struct {
 	Code string
 	// Retryable разрешает воркеру повторить временно неудавшийся вызов.
 	Retryable bool
+	// RetryAfter хранит задержку из HTTP-заголовка провайдера. Ноль означает,
+	// что подходящей подсказки нет.
+	RetryAfter time.Duration
 }
 
 // Error возвращает только код: сообщение провайдера может содержать приватные данные.
@@ -48,6 +58,16 @@ func (providerError *LLMProviderError) Error() string { return providerError.Cod
 func IsRetryableProviderError(err error) bool {
 	var providerError *LLMProviderError
 	return errors.As(err, &providerError) && providerError.Retryable
+}
+
+// ProviderRetryDelay извлекает подсказку о задержке из временной ошибки,
+// в том числе обёрнутой. Возвращает ноль, если подходящей подсказки нет.
+func ProviderRetryDelay(err error) time.Duration {
+	var providerError *LLMProviderError
+	if !errors.As(err, &providerError) || providerError == nil || !providerError.Retryable || providerError.RetryAfter <= 0 {
+		return 0
+	}
+	return min(providerError.RetryAfter, maxProviderRetryDelay)
 }
 
 // CEFRLevelClient определяет сложность английского текста через OpenAI-совместимый
@@ -108,9 +128,18 @@ func (client *CEFRLevelClient) ModelName() string {
 }
 
 // DetectCEFRLevel определяет сложность английского текста по шкале CEFR (A1–C2).
-// Исходный текст не изменяется. Метод делает один HTTP-вызов; решение о повторе
-// принимает воркер очереди. Разбор и проверка ответа находятся в отдельном файле.
-func (client *CEFRLevelClient) DetectCEFRLevel(ctx context.Context, sourceText string) (models.CEFRLevel, error) {
+// promptVersion берётся из запроса очереди и определяет инструкцию для модели.
+// Метод делает один HTTP-вызов. Решение о повторе принимает воркер очереди.
+func (client *CEFRLevelClient) DetectCEFRLevel(ctx context.Context, sourceText, promptVersion string) (models.CEFRLevel, error) {
+	var detectionPrompt string
+	switch promptVersion {
+	case cefrDetectionPromptVersionV1:
+		detectionPrompt = cefrDetectionPromptV1
+	case cefrDetectionPromptVersionV2:
+		detectionPrompt = cefrDetectionPromptV2
+	default:
+		return "", &LLMProviderError{Code: "LLM_PROMPT_UNSUPPORTED"}
+	}
 	if !client.HasAPIKeys() {
 		return "", &LLMProviderError{Code: "LLM_NOT_CONFIGURED"}
 	}
@@ -121,7 +150,7 @@ func (client *CEFRLevelClient) DetectCEFRLevel(ctx context.Context, sourceText s
 	// Более ранний срок или отмена родительского контекста также сохраняются.
 	requestContext, cancel := context.WithTimeout(ctx, client.requestTimeout)
 	defer cancel()
-	httpRequest, err := client.buildCEFRDetectionRequest(requestContext, sourceText)
+	httpRequest, err := client.buildCEFRDetectionRequest(requestContext, sourceText, detectionPrompt)
 	if err != nil {
 		return "", err
 	}
@@ -135,11 +164,11 @@ func (client *CEFRLevelClient) DetectCEFRLevel(ctx context.Context, sourceText s
 
 // buildCEFRDetectionRequest отделяет недоверенный пользовательский текст
 // от инструкции приложения и схемы результата. Здесь же задаётся авторизация.
-func (client *CEFRLevelClient) buildCEFRDetectionRequest(ctx context.Context, sourceText string) (*http.Request, error) {
+func (client *CEFRLevelClient) buildCEFRDetectionRequest(ctx context.Context, sourceText, detectionPrompt string) (*http.Request, error) {
 	payload := chatCompletionRequest{
 		Model: client.modelName,
 		Messages: []chatCompletionMessage{
-			{Role: "system", Content: cefrDetectionPrompt + "\nExpected JSON schema:\n" + cefrDetectionSchema},
+			{Role: "system", Content: detectionPrompt + "\nExpected JSON schema:\n" + cefrDetectionSchema},
 			{Role: "user", Content: sourceText},
 		},
 		ResponseFormat: jsonResponseFormat{Type: "json_object"},
