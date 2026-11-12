@@ -9,10 +9,18 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// seedTopics добавляет стартовые темы. Повторный запуск ничего не дублирует
-// и не меняет уже существующие темы. Slug — стабильный ключ, после запуска его
-// менять нельзя: на него могут ссылаться другие части проекта.
+// seedTopics добавляет стартовые темы только в пустую таблицу. Дальше темами управляют
+// администраторы: иначе удалённая стартовая тема возвращалась бы при каждом запуске.
+// Slug — стабильный ключ, после запуска его менять нельзя: на него могут ссылаться
+// другие части проекта.
 func seedTopics(tx *gorm.DB) error {
+	var count int64
+	if err := tx.Model(&topics.Topic{}).Count(&count).Error; err != nil {
+		return fmt.Errorf("count topics: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
 	initial := []topics.Topic{
 		{Slug: "it", Name: "IT"},
 		{Slug: "aviation", Name: "Авиация"},
