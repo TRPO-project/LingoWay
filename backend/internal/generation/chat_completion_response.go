@@ -11,17 +11,13 @@ import (
 	"lingoway/internal/models"
 )
 
-// Для одного уровня CEFR достаточно короткого ответа. Лимит 64 КиБ относится
-// ко всему HTTP-ответу провайдера и ограничивает объём чтения в память.
-const maxProviderResponseBytes = 64 << 10
-
 // Ограничиваем подсказку провайдера сутками, чтобы ошибочный заголовок
 // не отложил повтор на неопределённо долгий срок.
 const maxProviderRetryDelay = 24 * time.Hour
 
-// readCEFRLevelResponse проверяет HTTP-статус и объём ответа, затем последовательно
-// разбирает оболочку Chat Completions и строгий JSON с результатом определения CEFR.
-func readCEFRLevelResponse(ctx context.Context, httpResponse *http.Response) (models.CEFRLevel, error) {
+// readChatCompletionContent ограничивает весь HTTP-ответ и извлекает текст
+// модели. Форму результата проверяет конкретная операция.
+func readChatCompletionContent(ctx context.Context, httpResponse *http.Response, responseLimit int64) (string, error) {
 	if httpResponse.StatusCode < 200 || httpResponse.StatusCode >= 300 {
 		// Тело ошибки не читаем: оно может повторять материал или служебные данные.
 		providerError := classifyProviderHTTPStatus(httpResponse.StatusCode)
@@ -32,18 +28,14 @@ func readCEFRLevelResponse(ctx context.Context, httpResponse *http.Response) (mo
 	}
 	// Дополнительный байт отличает ответ ровно на границе лимита от слишком
 	// большого ответа, который иначе выглядел бы просто обрезанным.
-	responseBody, err := io.ReadAll(io.LimitReader(httpResponse.Body, maxProviderResponseBytes+1))
+	responseBody, err := io.ReadAll(io.LimitReader(httpResponse.Body, responseLimit+1))
 	if err != nil {
 		return "", classifyProviderTransportError(ctx, err)
 	}
-	if len(responseBody) > maxProviderResponseBytes {
+	if int64(len(responseBody)) > responseLimit {
 		return "", &LLMProviderError{Code: "LLM_INVALID_RESPONSE"}
 	}
-	completionContent, err := parseChatCompletionContent(responseBody)
-	if err != nil {
-		return "", err
-	}
-	return parseCEFRLevelJSON(completionContent)
+	return parseChatCompletionContent(responseBody)
 }
 
 func classifyProviderHTTPStatus(statusCode int) *LLMProviderError {
@@ -130,10 +122,17 @@ func parseCEFRLevelJSON(completionContent string) (models.CEFRLevel, error) {
 		return "", &LLMProviderError{Code: "LLM_INVALID_RESPONSE"}
 	}
 	// Схема в инструкции помогает модели, но не заменяет проверку ответа кодом.
-	switch detectedLevel {
-	case models.LevelA1, models.LevelA2, models.LevelB1, models.LevelB2, models.LevelC1, models.LevelC2:
-		return detectedLevel, nil
-	default:
+	if !isCEFRLevel(detectedLevel) {
 		return "", &LLMProviderError{Code: "LLM_INVALID_RESPONSE"}
+	}
+	return detectedLevel, nil
+}
+
+func isCEFRLevel(level models.CEFRLevel) bool {
+	switch level {
+	case models.LevelA1, models.LevelA2, models.LevelB1, models.LevelB2, models.LevelC1, models.LevelC2:
+		return true
+	default:
+		return false
 	}
 }

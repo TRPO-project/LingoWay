@@ -3,7 +3,6 @@ package httpapi
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"mime"
@@ -53,35 +52,8 @@ func (handler materialHTTPHandler) createTextMaterial(requestContext *gin.Contex
 		writeAPIError(requestContext, http.StatusBadRequest, "INVALID_IDEMPOTENCY_KEY", "Укажите UUID в заголовке Idempotency-Key.")
 		return
 	}
-	mediaType, _, err := mime.ParseMediaType(requestContext.GetHeader("Content-Type"))
-	if err != nil || mediaType != "application/json" {
-		writeAPIError(requestContext, http.StatusUnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "Ожидается application/json.")
-		return
-	}
-	requestContext.Request.Body = http.MaxBytesReader(requestContext.Writer, requestContext.Request.Body, maxCreateMaterialJSONBytes)
-	requestBodyBytes, err := io.ReadAll(requestContext.Request.Body)
-	if err != nil {
-		writeInvalidJSONError(requestContext, err)
-		return
-	}
-	if !utf8.Valid(requestBodyBytes) {
-		writeAPIError(requestContext, http.StatusBadRequest, "INVALID_JSON", "JSON должен быть в кодировке UTF-8.")
-		return
-	}
-	requestJSONDecoder := json.NewDecoder(bytes.NewReader(requestBodyBytes))
-	// Неизвестные поля и второй JSON после объекта считаем ошибкой, чтобы опечатки
-	// и попытки передать служебные поля не превращались в молча проигнорированный ввод.
-	requestJSONDecoder.DisallowUnknownFields()
 	var materialInput materials.CreateTextMaterialInput
-	if err := requestJSONDecoder.Decode(&materialInput); err != nil {
-		writeInvalidJSONError(requestContext, err)
-		return
-	}
-	var trailingJSONValue any
-	if err := requestJSONDecoder.Decode(&trailingJSONValue); err != io.EOF {
-		if err == nil {
-			err = errors.New("multiple JSON values")
-		}
+	if err := decodeJSONRequest(requestContext, maxCreateMaterialJSONBytes, &materialInput); err != nil {
 		writeInvalidJSONError(requestContext, err)
 		return
 	}

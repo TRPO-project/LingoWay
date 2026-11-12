@@ -76,26 +76,40 @@ func newLLMRequestResponse(llmRequest *llm.LLMRequest) llmRequestResponse {
 	// Сообщение из ErrorMessage не используем: оно может содержать внутренние
 	// сведения. Только известные коды получают заранее заданное безопасное описание.
 	if llmRequest.Status == models.LLMFailed {
-		safeFailure := llmRequestFailureResponse{Code: "PROCESSING_FAILED", Message: "Не удалось подготовить материал."}
-		if llmRequest.ErrorCode != nil {
-			switch *llmRequest.ErrorCode {
-			case "LLM_TIMEOUT", "LLM_RATE_LIMITED", "LLM_UNAVAILABLE":
-				safeFailure = llmRequestFailureResponse{Code: *llmRequest.ErrorCode, Message: "Сервис модели временно недоступен.", Retryable: true}
-			case "LLM_NOT_CONFIGURED":
-				safeFailure = llmRequestFailureResponse{Code: *llmRequest.ErrorCode, Message: "Подключение к модели не настроено."}
-			case "LLM_INVALID_RESPONSE":
-				safeFailure = llmRequestFailureResponse{Code: *llmRequest.ErrorCode, Message: "Модель вернула некорректный ответ."}
-			case "LLM_PROVIDER_ERROR":
-				safeFailure = llmRequestFailureResponse{Code: *llmRequest.ErrorCode, Message: "Сервис модели отклонил запрос."}
-			case "LLM_INVALID_INPUT":
-				safeFailure = llmRequestFailureResponse{Code: *llmRequest.ErrorCode, Message: "Материал не подходит для обработки."}
-			case "LLM_CANCELLED":
-				safeFailure = llmRequestFailureResponse{Code: *llmRequest.ErrorCode, Message: "Обработка материала отменена."}
-			}
-		}
+		safeFailure := describeLLMRequestFailure(llmRequest.Operation, llmRequest.ErrorCode)
 		response.Error = &safeFailure
 	}
 	return response
+}
+
+func describeLLMRequestFailure(operation models.LLMOperation, errorCode *string) llmRequestFailureResponse {
+	failedMessage := "Не удалось подготовить материал."
+	invalidInputMessage := "Материал не подходит для обработки."
+	cancelledMessage := "Обработка материала отменена."
+	if operation == models.LLMGenerateModule {
+		failedMessage = "Не удалось сгенерировать упражнения."
+		invalidInputMessage = "Материал или параметры не подходят для генерации упражнений."
+		cancelledMessage = "Генерация упражнений отменена."
+	}
+	if errorCode == nil {
+		return llmRequestFailureResponse{Code: "PROCESSING_FAILED", Message: failedMessage}
+	}
+	switch *errorCode {
+	case "LLM_TIMEOUT", "LLM_RATE_LIMITED", "LLM_UNAVAILABLE":
+		return llmRequestFailureResponse{Code: *errorCode, Message: "Сервис модели временно недоступен.", Retryable: true}
+	case "LLM_NOT_CONFIGURED":
+		return llmRequestFailureResponse{Code: *errorCode, Message: "Подключение к модели не настроено."}
+	case "LLM_INVALID_RESPONSE":
+		return llmRequestFailureResponse{Code: *errorCode, Message: "Модель вернула некорректный ответ."}
+	case "LLM_PROVIDER_ERROR":
+		return llmRequestFailureResponse{Code: *errorCode, Message: "Сервис модели отклонил запрос."}
+	case "LLM_INVALID_INPUT":
+		return llmRequestFailureResponse{Code: *errorCode, Message: invalidInputMessage}
+	case "LLM_CANCELLED":
+		return llmRequestFailureResponse{Code: *errorCode, Message: cancelledMessage}
+	default:
+		return llmRequestFailureResponse{Code: "PROCESSING_FAILED", Message: failedMessage}
+	}
 }
 
 func writeAPIError(requestContext *gin.Context, status int, code, message string) {
@@ -104,11 +118,16 @@ func writeAPIError(requestContext *gin.Context, status int, code, message string
 
 func writeInvalidJSONError(requestContext *gin.Context, err error) {
 	var bodySizeLimitError *http.MaxBytesError
-	if errors.As(err, &bodySizeLimitError) {
+	switch {
+	case errors.Is(err, errUnsupportedJSONMediaType):
+		writeAPIError(requestContext, http.StatusUnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "Ожидается application/json.")
+	case errors.Is(err, errInvalidJSONEncoding):
+		writeAPIError(requestContext, http.StatusBadRequest, "INVALID_JSON", "JSON должен быть в кодировке UTF-8.")
+	case errors.As(err, &bodySizeLimitError):
 		writeTextImportError(requestContext, materials.ErrMaterialSizeLimitExceeded)
-		return
+	default:
+		writeAPIError(requestContext, http.StatusBadRequest, "INVALID_JSON", "Проверьте JSON и набор полей запроса.")
 	}
-	writeAPIError(requestContext, http.StatusBadRequest, "INVALID_JSON", "Проверьте JSON и набор полей запроса.")
 }
 
 func writeTextImportError(requestContext *gin.Context, err error) {
