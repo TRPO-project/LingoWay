@@ -83,12 +83,21 @@ go build ./...
 go vet ./...
 ```
 
-
 ## Остановка
 
 - Способ А: `Ctrl+C` в обоих терминалах.
 - Способ Б: `Ctrl+C`, затем `docker compose down`.
 - Остановить и стереть данные базы: `docker compose down -v`.
+
+## Первый администратор
+
+Зарегистрируйте пользователя через `/api/auth/register`, затем:
+
+```bash
+docker compose exec db psql -U postgres -d lingoway -c "UPDATE users SET role='admin' WHERE email='you@example.com';"
+```
+
+Роль применяется сразу, повторный вход не нужен.
 
 ## Переменные окружения
 

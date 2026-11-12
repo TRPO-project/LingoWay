@@ -10,6 +10,7 @@ CREATE TABLE public.users (
     password_hash text NOT NULL CHECK (length(btrim(password_hash)) > 0),
     name text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 100),
     role text NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'teacher', 'admin')),
+    is_blocked boolean NOT NULL DEFAULT false,
     created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX users_email_unique ON public.users (lower(btrim(email)));
