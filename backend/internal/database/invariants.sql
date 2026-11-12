@@ -10,7 +10,7 @@
 -- SQL использует возможности PostgreSQL 16; PG18 NOT NULL constraints не экспортируются.
 
 -- Ordinal preserves UNIQUE -> CHECK -> FK dependency order.
--- Keep definitions as data so all 72 constraints share one idempotent installer.
+-- Keep definitions as data so all 76 constraints share one idempotent installer.
 DO $$
 DECLARE
     constraint_record record;
@@ -160,7 +160,15 @@ BEGIN
         (71, 'catalog_material_favorites', 'catalog_material_favorites_user_id_fkey',
             $ddl$FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE$ddl$),
         (72, 'catalog_material_favorites', 'catalog_material_favorites_material_id_fkey',
-            $ddl$FOREIGN KEY (material_id) REFERENCES public.catalog_materials(id) ON DELETE CASCADE$ddl$)
+            $ddl$FOREIGN KEY (material_id) REFERENCES public.catalog_materials(id) ON DELETE CASCADE$ddl$),
+        (73, 'user_topics', 'user_topics_user_id_position_key',
+            $ddl$UNIQUE (user_id, "position")$ddl$),
+        (74, 'user_topics', 'user_topics_position_check',
+            $ddl$CHECK ("position" > 0)$ddl$),
+        (75, 'user_topics', 'user_topics_user_id_fkey',
+            $ddl$FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE$ddl$),
+        (76, 'user_topics', 'user_topics_topic_id_fkey',
+            $ddl$FOREIGN KEY (topic_id) REFERENCES public.topics(id) ON DELETE CASCADE$ddl$)
         ) AS definitions(ordinal, table_name, constraint_name, definition)
         ORDER BY ordinal
     LOOP
@@ -376,3 +384,8 @@ CREATE INDEX IF NOT EXISTS catalog_materials_topic_level_idx ON public.catalog_m
 
 -- Standalone index: catalog_favorites_material_idx
 CREATE INDEX IF NOT EXISTS catalog_favorites_material_idx ON public.catalog_material_favorites USING btree (material_id);
+
+-- migrate:statement
+
+-- Standalone index: user_topics_topic_idx
+CREATE INDEX IF NOT EXISTS user_topics_topic_idx ON public.user_topics USING btree (topic_id);
