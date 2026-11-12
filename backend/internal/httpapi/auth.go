@@ -107,6 +107,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	if user.IsBlocked {
+		writeAPIError(c, http.StatusForbidden, "ACCOUNT_BLOCKED", "Аккаунт заблокирован.")
+		return
+	}
+
 	token, err := auth.GenerateToken(user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Can not generate token"})
