@@ -54,6 +54,8 @@ func NewRouter(database *gorm.DB, options ...RouterOptions) *gin.Engine {
 		})
 
 		registerCatalogRoutes(protected, database)
+		registerUserTopicRoutes(protected, database)
+
 		admin := protected.Group("/admin")
 		admin.Use(middleware.RequireRole(users.RoleAdmin))
 		{
