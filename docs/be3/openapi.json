@@ -482,7 +482,7 @@
       "get": {
         "operationId": "listExercises",
         "summary": "Задания модуля",
-        "description": "Только ready-модуль, доступный текущему пользователю. Порядок position ASC. Ни answer_key, ни explanation не выдаются. level/topic_id вычисляются из модуля.",
+        "description": "Общий режим без JWT для готовых модулей, созданных через генерацию по материалу. Порядок position ASC. level/topic_id берутся из модуля. Ключи ответов и объяснения хранятся на сервере.",
         "responses": {
           "200": {
             "description": "Успех.",
@@ -529,9 +529,6 @@
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -540,6 +537,12 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "parameters": [
@@ -573,7 +576,8 @@
             }
           }
         ],
-        "x-implemented": false
+        "x-implemented": true,
+        "security": []
       },
       "post": {
         "operationId": "createExercise",
@@ -1268,7 +1272,7 @@
       "post": {
         "operationId": "generateModule",
         "summary": "Сгенерировать модуль",
-        "description": "Только свой ready-материал. Атомарно создаёт private generating-модуль и generate_module запрос; до записи сначала ищет idempotency replay. count=2..30, не меньше числа уникальных типов. Распределение: floor(count/k) каждому типу, остаток первым типам в порядке запроса. Воркер валидирует все задания по шаблонам и методологии, затем одной транзакцией пишет упражнения+ready+успешный запрос. При ошибке модуль failed, частичные задания недоступны. Повтор для нового модуля — новый ключ.",
+        "description": "Общий режим без JWT. По ready-материалу атомарно создаёт private generating-модуль и запрос generate_module. Повтор с тем же ключом и вводом возвращает исходную пару. Допустимы 2–30 заданий и семь закрытых типов. Задания распределяются равномерно, остаток достаётся первым типам в порядке запроса. Воркер проверяет форму, количество и ссылки в ключах. Все задания появляются вместе при переходе модуля в ready.",
         "responses": {
           "202": {
             "description": "Успех.",
@@ -1291,20 +1295,33 @@
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "413": {
+            "description": "Тело запроса больше 8 КиБ.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "requestBody": {
@@ -1332,7 +1349,8 @@
             "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
-        "x-implemented": false
+        "x-implemented": true,
+        "security": []
       }
     },
     "/api/llm-requests/{request_id}": {
@@ -2267,10 +2285,19 @@
           "types": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ExerciseType"
+              "type": "string",
+              "enum": [
+                "vocabulary_gap",
+                "vocabulary_matching_translation",
+                "vocabulary_matching_definition",
+                "vocabulary_context_choice",
+                "grammar_brackets",
+                "grammar_tense",
+                "grammar_word_order"
+              ]
             },
             "minItems": 1,
-            "maxItems": 9,
+            "maxItems": 7,
             "uniqueItems": true
           }
         },
@@ -2287,7 +2314,7 @@
             "title": "Algorithms and code",
             "topic_id": 1,
             "difficulty": "B1",
-            "count": 9,
+            "count": 7,
             "types": [
               "vocabulary_gap",
               "vocabulary_matching_translation",
@@ -2295,9 +2322,7 @@
               "vocabulary_context_choice",
               "grammar_brackets",
               "grammar_tense",
-              "grammar_word_order",
-              "comprehension_question",
-              "reasoning_question"
+              "grammar_word_order"
             ]
           }
         ]

@@ -2,64 +2,27 @@ package materials
 
 import (
 	"context"
-	"log"
-	"time"
 
 	"lingoway/internal/generation"
 	"lingoway/internal/models"
 	"lingoway/internal/models/llm"
 )
 
-// PreparationWorkerOptions ограничивает время вызова LLM и число попыток.
-// QueuePollInterval относится к опросу очереди в БД, а не к запросам фронтенда.
-type PreparationWorkerOptions struct {
-	LLMRequestTimeout      time.Duration
-	QueuePollInterval      time.Duration
-	MaxPreparationAttempts int
-}
-
 // PreparationWorker выполняет только prepare_material. Один экземпляр работает
-// последовательно; несколько процессов разделяют общую очередь через PostgreSQL.
+// последовательно. Несколько процессов разделяют общую очередь через PostgreSQL.
 type PreparationWorker struct {
 	materialService *MaterialService
-	options         PreparationWorkerOptions
+	options         LLMWorkerOptions
 }
 
 // NewPreparationWorker задаёт стандартные ограничения, но не запускает обработку.
-func NewPreparationWorker(materialService *MaterialService, options PreparationWorkerOptions) *PreparationWorker {
-	if options.LLMRequestTimeout <= 0 {
-		options.LLMRequestTimeout = 45 * time.Second
-	}
-	if options.QueuePollInterval <= 0 {
-		options.QueuePollInterval = time.Second
-	}
-	if options.MaxPreparationAttempts <= 0 {
-		options.MaxPreparationAttempts = 3
-	}
-	return &PreparationWorker{materialService: materialService, options: options}
+func NewPreparationWorker(materialService *MaterialService, options LLMWorkerOptions) *PreparationWorker {
+	return &PreparationWorker{materialService: materialService, options: options.withDefaults()}
 }
 
 // RunUntilStopped обрабатывает очередь до отмены контекста приложения.
-// При свободной работе следующий запрос берётся сразу; пустая очередь и ошибки
-// БД вызывают паузу, чтобы не нагружать базу непрерывным опросом.
 func (worker *PreparationWorker) RunUntilStopped(ctx context.Context) {
-	pollTicker := time.NewTicker(worker.options.QueuePollInterval)
-	defer pollTicker.Stop()
-	for ctx.Err() == nil {
-		requestWasClaimed, err := worker.ProcessNextPreparationRequest(ctx)
-		if err != nil && ctx.Err() == nil {
-			// Исходная ошибка драйвера может содержать текст материала или пароль.
-			log.Print("material worker: queue operation failed")
-		}
-		if requestWasClaimed && err == nil {
-			continue
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-pollTicker.C:
-		}
-	}
+	runLLMWorker(ctx, worker.options.QueuePollInterval, "material worker", worker.ProcessNextPreparationRequest)
 }
 
 // ProcessNextPreparationRequest проводит одну работу через три явных этапа:
@@ -70,11 +33,12 @@ func (worker *PreparationWorker) ProcessNextPreparationRequest(ctx context.Conte
 	if service == nil || service.database == nil || service.levelDetector == nil || !service.levelDetector.HasAPIKeys() {
 		return false, nil
 	}
-	preparationRequest, err := worker.claimNextPreparationRequest(ctx)
+	preparationRequest, err := claimNextLLMRequest(ctx, service.database, models.LLMPrepareMaterial,
+		worker.options.LLMRequestTimeout, service.levelDetector.ProviderName(), service.levelDetector.ModelName())
 	if err != nil || preparationRequest == nil {
 		return false, err
 	}
-	if preparationRequest.AttemptCount > worker.options.MaxPreparationAttempts {
+	if preparationRequest.AttemptCount > worker.options.MaxAttempts {
 		// Последний процесс мог упасть после захвата работы. Завершаем запрос
 		// без ещё одного платного вызова, если бюджет попыток уже исчерпан.
 		return true, worker.savePreparationOutcome(ctx, preparationRequest, "",
@@ -94,15 +58,12 @@ func (worker *PreparationWorker) ProcessNextPreparationRequest(ctx context.Conte
 }
 
 func (worker *PreparationWorker) detectMaterialCEFRLevel(ctx context.Context, request *llm.LLMRequest, material *llm.Material) (models.CEFRLevel, error) {
-	if request.PromptVersion != generation.CEFRDetectionPromptVersion {
-		return "", &generation.LLMProviderError{Code: "LLM_PROMPT_UNSUPPORTED"}
-	}
 	if material.SourceText == nil || material.Kind != models.MaterialText {
 		return "", &generation.LLMProviderError{Code: "MATERIAL_UNSUPPORTED"}
 	}
 	llmCallContext, cancelLLMCall := context.WithTimeout(ctx, worker.options.LLMRequestTimeout)
 	defer cancelLLMCall()
-	detectedLevel, err := worker.materialService.levelDetector.DetectCEFRLevel(llmCallContext, *material.SourceText)
+	detectedLevel, err := worker.materialService.levelDetector.DetectCEFRLevel(llmCallContext, *material.SourceText, request.PromptVersion)
 	if err != nil {
 		return "", err
 	}

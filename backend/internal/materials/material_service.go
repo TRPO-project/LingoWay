@@ -25,17 +25,15 @@ var (
 	ErrResourceNotFound = errors.New("resource not found")
 	// ErrMaterialPreparationUnavailable означает отсутствие БД или ключей для новой работы.
 	ErrMaterialPreparationUnavailable = errors.New("material preparation is not configured")
-	// ErrPreparationLeaseLost запрещает сохранять результат после истечения или смены аренды.
-	ErrPreparationLeaseLost = errors.New("request lease is no longer current")
 )
 
 var idempotencyKeyPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// CEFRLevelDetector определяет уровень английского текста, не изменяя сам текст.
+// CEFRLevelDetector определяет уровень английского текста по версии инструкции из очереди.
 // Интерфейс отделяет подготовку материала от протокола конкретного провайдера.
 type CEFRLevelDetector interface {
 	HasAPIKeys() bool
-	DetectCEFRLevel(context.Context, string) (models.CEFRLevel, error)
+	DetectCEFRLevel(ctx context.Context, sourceText, promptVersion string) (models.CEFRLevel, error)
 	ProviderName() string
 	ModelName() string
 }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -57,37 +58,38 @@ func run() error {
 
 	// Отсутствие ключей LLM не мешает запуску сервера: чтение существующих
 	// материалов и извлечение текста остаются доступны в общем режиме.
-	cefrLevelClient, err := generation.NewCEFRLevelClient(cfg.LLM, nil)
+	llmClient, err := generation.NewChatCompletionClient(cfg.LLM, nil)
 	if err != nil {
 		return fmt.Errorf("initialize LLM client: %w", err)
 	}
-	materialService := materials.NewMaterialService(db, cefrLevelClient)
-	preparationContext, stopMaterialPreparation := context.WithCancel(ctx)
-	preparationStopped := make(chan struct{})
-	if cefrLevelClient.HasAPIKeys() {
-		preparationWorker := materials.NewPreparationWorker(materialService, materials.PreparationWorkerOptions{
+	materialService := materials.NewMaterialService(db, llmClient)
+	moduleGenerationService := materials.NewModuleGenerationService(db, llmClient)
+	workerContext, stopWorkers := context.WithCancel(ctx)
+	var workers sync.WaitGroup
+	if llmClient.HasAPIKeys() {
+		workerOptions := materials.LLMWorkerOptions{
 			LLMRequestTimeout: cfg.LLM.Timeout, QueuePollInterval: cfg.LLM.PollInterval,
-			MaxPreparationAttempts: cfg.LLM.MaxAttempts,
-		})
-		go func() {
-			defer close(preparationStopped)
-			preparationWorker.RunUntilStopped(preparationContext)
-		}()
+			MaxAttempts: cfg.LLM.MaxAttempts,
+		}
+		preparationWorker := materials.NewPreparationWorker(materialService, workerOptions)
+		moduleGenerationWorker := materials.NewModuleGenerationWorker(moduleGenerationService, workerOptions)
+		workers.Go(func() { preparationWorker.RunUntilStopped(workerContext) })
+		workers.Go(func() { moduleGenerationWorker.RunUntilStopped(workerContext) })
 	} else {
-		close(preparationStopped)
-		log.Print("LLM preparation disabled: configure LLM_API_KEYS")
+		log.Print("LLM workers disabled: configure LLM_API_KEYS")
 	}
-	// Сначала останавливаем воркер и ждём его выхода, затем закрываем пул БД.
-	// defer выполнится и при ошибке запуска HTTP-сервера; незавершённый запрос
-	// останется в очереди и будет восстановлен после истечения аренды.
+	// Останавливаем оба воркера до закрытия пула БД. Незавершённые запросы
+	// остаются в очереди и восстанавливаются после истечения аренды.
 	defer func() {
-		stopMaterialPreparation()
-		<-preparationStopped
+		stopWorkers()
+		workers.Wait()
 	}()
 
 	server := &http.Server{
-		Addr:              ":" + cfg.Port,
-		Handler:           httpapi.NewRouter(db, httpapi.RouterOptions{MaterialService: materialService}),
+		Addr: ":" + cfg.Port,
+		Handler: httpapi.NewRouter(db, httpapi.RouterOptions{
+			MaterialService: materialService, ModuleGenerationService: moduleGenerationService,
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,

@@ -1,12 +1,11 @@
-// Package httpapi связывает HTTP-запросы с сервисом подготовки материалов.
-// Здесь проверяется формат входных данных; работа с БД и очередью остаётся
-// в materials. На текущем этапе все маршруты работают без проверки пользователя.
+// Package httpapi связывает маршруты с сервисами приложения.
 package httpapi
 
 import (
+	"net/http"
+
 	"lingoway/internal/middleware"
 	"lingoway/internal/models/users"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -17,14 +16,13 @@ import (
 type RouterOptions struct {
 	// MaterialService выполняет операции в общем режиме без проверки владельца.
 	MaterialService MaterialPreparationService
+	// ModuleGenerationService создаёт модули из материалов и читает готовые упражнения.
+	ModuleGenerationService ModuleGenerationService
 }
 
-// NewRouter создаёт общий HTTP API без авторизации. Материалы и статусы запросов
-// доступны по ID. Без options работают health и предварительное извлечение текста;
-// создание и чтение материала требуют переданного сервиса.
-// Подключение к БД передаётся отдельно для будущих обработчиков каталога.
+// NewRouter подключает авторизацию и общие маршруты работы с материалами и генерацией.
+// Без options доступны health и предварительное извлечение текста из файла.
 func NewRouter(database *gorm.DB, options ...RouterOptions) *gin.Engine {
-	_ = database
 	router := gin.Default()
 	// Не доверяем переданному клиентом X-Forwarded-For. При появлении обратного
 	// прокси его доверенные адреса нужно настроить явно.
@@ -72,6 +70,7 @@ func NewRouter(database *gorm.DB, options ...RouterOptions) *gin.Engine {
 		routerOptions = options[0]
 	}
 	materialHandlers := materialHTTPHandler{materialPreparationService: routerOptions.MaterialService}
+	moduleHandlers := moduleGenerationHTTPHandler{service: routerOptions.ModuleGenerationService}
 	materialAPI := api.Group("")
 	// Проверка пользователя временно отключена, но ответы с текстами и состоянием
 	// обработки по-прежнему не должны сохраняться HTTP-клиентами и общими кэшами.
@@ -83,6 +82,8 @@ func NewRouter(database *gorm.DB, options ...RouterOptions) *gin.Engine {
 	materialAPI.POST("/materials", materialHandlers.createTextMaterial)
 	materialAPI.GET("/materials/:id", materialHandlers.getMaterialByID)
 	materialAPI.GET("/llm-requests/:id", materialHandlers.getLLMRequestByID)
+	materialAPI.POST("/materials/:id/modules", moduleHandlers.createGeneratedModule)
+	materialAPI.GET("/modules/:id/exercises", moduleHandlers.listGeneratedModuleExercises)
 
 	return router
 }
