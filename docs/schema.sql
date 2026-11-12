@@ -198,6 +198,16 @@ CREATE TABLE public.catalog_material_favorites (
 );
 CREATE INDEX catalog_favorites_material_idx ON public.catalog_material_favorites(material_id);
 
+CREATE TABLE public.user_topics (
+    user_id bigint NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    topic_id bigint NOT NULL REFERENCES public.topics(id) ON DELETE CASCADE,
+    position integer NOT NULL CHECK (position > 0),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, topic_id),
+    UNIQUE (user_id, position)
+);
+CREATE INDEX user_topics_topic_idx ON public.user_topics(topic_id);
+
 CREATE FUNCTION public.guard_exercise_write() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE module_status text;
 BEGIN
