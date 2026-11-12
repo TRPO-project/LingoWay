@@ -10,6 +10,7 @@ CREATE TABLE public.users (
     password_hash text NOT NULL CHECK (length(btrim(password_hash)) > 0),
     name text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 100),
     role text NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'teacher', 'admin')),
+    is_blocked boolean NOT NULL DEFAULT false,
     created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX users_email_unique ON public.users (lower(btrim(email)));
@@ -196,6 +197,16 @@ CREATE TABLE public.catalog_material_favorites (
     PRIMARY KEY (user_id, material_id)
 );
 CREATE INDEX catalog_favorites_material_idx ON public.catalog_material_favorites(material_id);
+
+CREATE TABLE public.user_topics (
+    user_id bigint NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    topic_id bigint NOT NULL REFERENCES public.topics(id) ON DELETE CASCADE,
+    position integer NOT NULL CHECK (position > 0),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, topic_id),
+    UNIQUE (user_id, position)
+);
+CREATE INDEX user_topics_topic_idx ON public.user_topics(topic_id);
 
 CREATE FUNCTION public.guard_exercise_write() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE module_status text;

@@ -45,6 +45,7 @@ func Migrate(ctx context.Context, db *gorm.DB) error {
 			&users.User{}, &topics.Topic{}, &llm.Material{}, &topics.Module{},
 			&topics.Exercise{}, &llm.Answer{}, &llm.LLMRequest{},
 			&topics.CatalogMaterial{}, &topics.CatalogMaterialFavorite{},
+			&topics.UserTopic{},
 		); err != nil {
 			return fmt.Errorf("auto-migrate models: %w", err)
 		}

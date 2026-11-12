@@ -10,6 +10,7 @@ type User struct {
 	PasswordHash string    `gorm:"column:password_hash;type:text;not null" json:"-"`
 	Name         string    `gorm:"column:name;type:text;not null" json:"name"`
 	Role         UserRole  `gorm:"column:role;type:text;not null;default:student" json:"role"`
+	IsBlocked    bool      `gorm:"column:is_blocked;type:boolean;not null;default:false" json:"is_blocked"`
 	CreatedAt    time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now();autoCreateTime:false" json:"created_at"`
 }
 

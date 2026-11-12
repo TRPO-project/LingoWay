@@ -41,7 +41,7 @@ func NewRouter(database *gorm.DB, options ...RouterOptions) *gin.Engine {
 	}
 
 	protected := api.Group("")
-	protected.Use(middleware.Auth())
+	protected.Use(middleware.Auth(), middleware.ActiveUser(database))
 	{
 		protected.GET("/me", func(c *gin.Context) {
 			claims, _ := middleware.GetClaims(c)
@@ -51,12 +51,18 @@ func NewRouter(database *gorm.DB, options ...RouterOptions) *gin.Engine {
 			})
 		})
 
+		registerCatalogRoutes(protected, database)
+		registerUserTopicRoutes(protected, database)
+
 		admin := protected.Group("/admin")
 		admin.Use(middleware.RequireRole(users.RoleAdmin))
 		{
 			admin.GET("/dashboard", func(c *gin.Context) {
 				c.JSON(http.StatusOK, gin.H{"message": "Admin panel"})
 			})
+			registerAdminCatalogRoutes(admin, database)
+			registerAdminUserRoutes(admin, database)
+			registerAdminTopicRoutes(admin, database)
 		}
 	}
 	var routerOptions RouterOptions
