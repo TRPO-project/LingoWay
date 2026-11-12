@@ -62,6 +62,7 @@ func NewRouter(database *gorm.DB, options ...RouterOptions) *gin.Engine {
 			})
 			registerAdminCatalogRoutes(admin, database)
 			registerAdminUserRoutes(admin, database)
+			registerAdminTopicRoutes(admin, database)
 		}
 	}
 	var routerOptions RouterOptions
