@@ -80,10 +80,11 @@ func NewRouter(database *gorm.DB, options ...RouterOptions) *gin.Engine {
 	})
 	materialAPI.POST("/materials/extract", materialHandlers.previewUploadedMaterialText)
 	materialAPI.POST("/materials", materialHandlers.createTextMaterial)
-	materialAPI.GET("/materials/:id", materialHandlers.getMaterialByID)
-	materialAPI.GET("/llm-requests/:id", materialHandlers.getLLMRequestByID)
-	materialAPI.POST("/materials/:id/modules", moduleHandlers.createGeneratedModule)
-	materialAPI.GET("/modules/:id/exercises", moduleHandlers.listGeneratedModuleExercises)
+	materialAPI.GET("/materials/:material_id", materialHandlers.getMaterialByID)
+	materialAPI.GET("/llm-requests/:request_id", materialHandlers.getLLMRequestByID)
+	materialAPI.POST("/materials/:material_id/modules", moduleHandlers.createGeneratedModule)
+	materialAPI.GET("/modules/:module_id", moduleHandlers.getGeneratedModuleByID)
+	materialAPI.GET("/modules/:module_id/exercises", moduleHandlers.listGeneratedModuleExercises)
 
 	return router
 }

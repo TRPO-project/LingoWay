@@ -47,6 +47,13 @@ type moduleGenerationParameters struct {
 	Types []models.ExerciseType `json:"types"`
 }
 
+// GeneratedModuleDetails объединяет модуль, количество готовых упражнений и код сбоя генерации.
+type GeneratedModuleDetails struct {
+	topics.Module
+	ExerciseCount int64
+	ErrorCode     *string
+}
+
 // ModuleGenerationService принимает запросы генерации и выдаёт готовые упражнения.
 type ModuleGenerationService struct {
 	database  *gorm.DB
@@ -59,7 +66,7 @@ func NewModuleGenerationService(database *gorm.DB, exerciseGenerator ExerciseGen
 
 // CreateGeneratedModule сохраняет модуль и работу очереди в одной транзакции.
 // Повтор прежнего ключа с теми же данными возвращает уже созданную пару.
-func (service *ModuleGenerationService) CreateGeneratedModule(ctx context.Context, materialID int64, idempotencyKey string, input CreateGeneratedModuleInput) (*topics.Module, *llm.LLMRequest, error) {
+func (service *ModuleGenerationService) CreateGeneratedModule(ctx context.Context, materialID int64, idempotencyKey string, input CreateGeneratedModuleInput) (*GeneratedModuleDetails, *llm.LLMRequest, error) {
 	if materialID <= 0 {
 		return nil, nil, ErrResourceNotFound
 	}
@@ -82,7 +89,7 @@ func (service *ModuleGenerationService) CreateGeneratedModule(ctx context.Contex
 		return nil, nil, err
 	}
 
-	var module topics.Module
+	var module GeneratedModuleDetails
 	var generationRequest llm.LLMRequest
 	err = service.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
 		var material llm.Material
@@ -116,12 +123,12 @@ func (service *ModuleGenerationService) CreateGeneratedModule(ctx context.Contex
 			return err
 		}
 		// В общем режиме владелец нужен для составных внешних ключей БД.
-		module = topics.Module{
+		module.Module = topics.Module{
 			CreatedByUserID: &material.OwnerUserID, MaterialID: &material.ID,
 			TopicID: input.TopicID, Title: input.Title, Difficulty: input.Difficulty,
 			Visibility: models.VisibilityPrivate, Status: models.ModuleGenerating,
 		}
-		if err := transaction.Create(&module).Error; err != nil {
+		if err := transaction.Create(&module.Module).Error; err != nil {
 			return err
 		}
 		generationRequest = llm.LLMRequest{
@@ -134,11 +141,12 @@ func (service *ModuleGenerationService) CreateGeneratedModule(ctx context.Contex
 	if err != nil {
 		return nil, nil, err
 	}
+	module.ErrorCode = generationRequest.ErrorCode
 	return &module, &generationRequest, nil
 }
 
-func loadGeneratedModuleReplay(transaction *gorm.DB, materialID int64, input CreateGeneratedModuleInput, request *llm.LLMRequest, module *topics.Module) error {
-	if err := transaction.First(module, *request.ModuleID).Error; err != nil {
+func loadGeneratedModuleReplay(transaction *gorm.DB, materialID int64, input CreateGeneratedModuleInput, request *llm.LLMRequest, module *GeneratedModuleDetails) error {
+	if err := transaction.First(&module.Module, *request.ModuleID).Error; err != nil {
 		return mapDatabaseNotFoundError(err)
 	}
 	var parameters moduleGenerationParameters
@@ -151,10 +159,43 @@ func loadGeneratedModuleReplay(transaction *gorm.DB, materialID int64, input Cre
 		return ErrMaterialIdempotencyConflict
 	}
 	if module.Status == models.ModuleReady {
-		// Ответ на повторный POST использует только число опубликованных заданий.
-		return transaction.Select("id").Where("module_id = ?", module.ID).Find(&module.Exercises).Error
+		return transaction.Model(&topics.Exercise{}).Where("module_id = ?", module.ID).Count(&module.ExerciseCount).Error
 	}
 	return nil
+}
+
+// Обе ручки чтения показывают только модули, созданные через генерацию по материалу.
+func sharedGenerationRequests(db *gorm.DB) *gorm.DB {
+	return db.Model(&llm.LLMRequest{}).
+		Where("module_id = modules.id AND operation = ? AND prompt_version IN ?", models.LLMGenerateModule,
+			[]string{generation.ExerciseGenerationPromptV1, generation.ExerciseGenerationPromptV2})
+}
+
+func sharedGeneratedModules(db *gorm.DB) *gorm.DB {
+	return db.Model(&topics.Module{}).Where("modules.material_id IS NOT NULL").
+		Where("EXISTS (?)", sharedGenerationRequests(db).Select("1"))
+}
+
+// GetGeneratedModuleByID читает состояние по адресу модуля, включая результат фоновой работы.
+func (service *ModuleGenerationService) GetGeneratedModuleByID(ctx context.Context, moduleID int64) (*GeneratedModuleDetails, error) {
+	if moduleID <= 0 {
+		return nil, ErrResourceNotFound
+	}
+	if service.database == nil {
+		return nil, ErrMaterialPreparationUnavailable
+	}
+	db := service.database.WithContext(ctx)
+	exerciseCount := db.Model(&topics.Exercise{}).Select("COUNT(*)").Where("module_id = modules.id")
+	failureCode := sharedGenerationRequests(db).Select("error_code").Where("status = ?", models.LLMFailed).
+		Order("id DESC").Limit(1)
+	var details GeneratedModuleDetails
+	// Один запрос читает статус и результат в одном состоянии БД, даже если воркер заканчивает работу.
+	err := sharedGeneratedModules(db).Select("modules.*, (?) AS exercise_count, (?) AS error_code", exerciseCount, failureCode).
+		Where("modules.id = ?", moduleID).Take(&details).Error
+	if err != nil {
+		return nil, mapDatabaseNotFoundError(err)
+	}
+	return &details, nil
 }
 
 // ListGeneratedModuleExercises возвращает готовые задания только из этого потока.
@@ -172,12 +213,7 @@ func (service *ModuleGenerationService) ListGeneratedModuleExercises(ctx context
 	var module topics.Module
 	exercises := make([]topics.Exercise, 0)
 	err := service.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
-		// При смене версии промпта сохраняем доступ к модулям прежних общих версий.
-		generatedInThisFlow := transaction.Model(&llm.LLMRequest{}).Select("1").
-			Where("module_id = modules.id AND operation = ? AND prompt_version = ?", models.LLMGenerateModule, generation.ExerciseGenerationPromptV1)
-		if err := transaction.Clauses(clause.Locking{Strength: "SHARE"}).
-			Where("material_id IS NOT NULL").Where("EXISTS (?)", generatedInThisFlow).
-			First(&module, moduleID).Error; err != nil {
+		if err := sharedGeneratedModules(transaction).Clauses(clause.Locking{Strength: "SHARE"}).First(&module, moduleID).Error; err != nil {
 			return mapDatabaseNotFoundError(err)
 		}
 		if module.Status != models.ModuleReady {

@@ -3,7 +3,7 @@
   "info": {
     "title": "LingoWay — общая БД и API v0.2",
     "version": "0.2.0",
-    "description": "Общая схема API v0.2. Реализованы health, создание текстового материала, предварительный импорт TXT/MD/DOCX, чтение материала и статуса LLM. Для каждой операции x-implemented показывает доступность. Реализованные операции материалов временно работают без проверки пользователя и JWT: ресурсы доступны по ID, ключ идемпотентности общий. Остальные операции описывают будущую реализацию и сохраняют проектируемую JWT-авторизацию. Все ID положительные bigint; UUID используется как Idempotency-Key. Подготовка материала определяет CEFR; генерация упражнений пока не подключена. Устройство реализации и ограничения: [LLM_MATERIALS.md](../LLM_MATERIALS.md)."
+    "description": "Общая схема API v0.2. Признак x-implemented у каждой операции показывает её доступность. Модуль LLM принимает текст, предварительно извлекает его из TXT/MD/DOCX, определяет CEFR и генерирует упражнения. Материалы, сгенерированные по ним модули и упражнения доступны в общем режиме без JWT. Адрес созданного ресурса возвращается в Location. Все ID — положительные целые числа. Для повторной отправки POST используется UUID в Idempotency-Key. [Руководство модуля](../LLM_MATERIALS.md)."
   },
   "servers": [
     {
@@ -307,8 +307,8 @@
     "/api/modules/{module_id}": {
       "get": {
         "operationId": "getModule",
-        "summary": "Прочитать модуль",
-        "description": "Свой модуль либо публичный ready-модуль; чужой ресурс возвращает 404.",
+        "summary": "Прочитать сгенерированный по материалу модуль",
+        "description": "Общий режим без JWT. Возвращает модуль, созданный через POST /api/materials/{material_id}/modules. Поле material_id связывает его с исходным текстом. При generating повторите GET, при ready читайте упражнения, при failed может присутствовать безопасная ошибка. Все три состояния возвращаются с HTTP 200. Если модуль отсутствует или создан вне этого процесса генерации, сервер отвечает 404.",
         "responses": {
           "200": {
             "description": "Успех.",
@@ -331,17 +331,14 @@
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
         "parameters": [
@@ -356,7 +353,8 @@
             }
           }
         ],
-        "x-implemented": false
+        "x-implemented": true,
+        "security": []
       },
       "patch": {
         "operationId": "editModule",
@@ -482,7 +480,7 @@
       "get": {
         "operationId": "listExercises",
         "summary": "Задания модуля",
-        "description": "Общий режим без JWT для готовых модулей, созданных через генерацию по материалу. Порядок position ASC. level/topic_id берутся из модуля. Ключи ответов и объяснения хранятся на сервере.",
+        "description": "Доступно без JWT для готового модуля из генерации по материалу. Вернёт 409, если модуль ещё не готов. Задания идут в порядке position. level и topic_id берутся из модуля. Вопросы на понимание и рассуждение содержат format=free_text и отрывок в content.context. Ключи, критерии оценки и объяснения остаются на сервере.",
         "responses": {
           "200": {
             "description": "Успех.",
@@ -984,16 +982,25 @@
       "post": {
         "operationId": "createMaterial",
         "summary": "Принять текст для подготовки",
-        "description": "Реализован только kind=text, до 20000 символов UTF-8 после нормализации. Временно без проверки пользователя и JWT. Создаёт material pending и prepare_material одной транзакцией. UUID Idempotency-Key обязателен и общий для всех вызовов: тот же нормализованный ввод возвращает первоначальные ресурсы, другой ввод — 409. Без LLM_API_KEYS новое создание возвращает 503 SERVICE_UNAVAILABLE; повтор ранее созданной пары с тем же ключом и вводом доступен. URL и сохранение бинарных источников пока не реализованы. Подробности: [LLM_MATERIALS.md](../LLM_MATERIALS.md).",
+        "description": "Принимает kind=text, до 20 000 символов после нормализации. Общий режим без JWT. Создаёт материал pending и фоновую работу одной транзакцией. ID материала назначает сервер. Для новой операции нужен UUID в Idempotency-Key. Повтор с тем же нормализованным вводом возвращает тот же Location, с другим вводом — 409. Когда провайдер не настроен, новый запуск возвращает 503, ранее созданный материал можно получить повтором. [Руководство модуля](../LLM_MATERIALS.md).",
         "responses": {
           "202": {
-            "description": "Успех.",
+            "description": "Сервер принял запрос. Читайте состояние материала методом GET по адресу из Location.",
             "headers": {
               "Cache-Control": {
                 "schema": {
                   "type": "string",
                   "const": "private, no-store"
                 }
+              },
+              "Location": {
+                "required": true,
+                "description": "Относительный адрес материала на этом сервере, включая повторный ответ с тем же ключом.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                },
+                "example": "/api/materials/12"
               }
             },
             "content": {
@@ -1117,7 +1124,7 @@
       "get": {
         "operationId": "getMaterial",
         "summary": "Прочитать материал по ID",
-        "description": "Временно без проверки пользователя и JWT. Любой существующий материал доступен по material_id, проверки владельца нет; отсутствующий ID даёт 404. В ready содержит подготовленный текст и CEFR. Файлы и ключ объекта не публикуются. Подробности: [LLM_MATERIALS.md](../LLM_MATERIALS.md).",
+        "description": "Общий режим без JWT. По Location из POST возвращает материал и его текущее состояние. При pending повторите GET, при ready доступны level и extracted_text, при failed может присутствовать безопасная ошибка. Все три состояния возвращаются с HTTP 200. Если материал отсутствует, сервер отвечает 404.",
         "responses": {
           "200": {
             "description": "Успех.",
@@ -1272,16 +1279,25 @@
       "post": {
         "operationId": "generateModule",
         "summary": "Сгенерировать модуль",
-        "description": "Общий режим без JWT. По ready-материалу атомарно создаёт private generating-модуль и запрос generate_module. Повтор с тем же ключом и вводом возвращает исходную пару. Допустимы 2–30 заданий и семь закрытых типов. Задания распределяются равномерно, остаток достаётся первым типам в порядке запроса. Воркер проверяет форму, количество и ссылки в ключах. Все задания появляются вместе при переходе модуля в ready.",
+        "description": "По готовому материалу создаёт модуль и фоновую работу одной транзакцией. Общий режим без JWT. Клиент получает адрес модуля в Location и читает его до ready или failed. Повтор с тем же ключом и вводом возвращает прежний модуль. Выберите 2–30 упражнений и от одного до девяти уникальных типов. Количество упражнений должно покрывать все выбранные типы. Остаток при равномерном распределении достаётся первым типам в порядке запроса. Весь набор сохраняется после проверки.",
         "responses": {
           "202": {
-            "description": "Успех.",
+            "description": "Сервер принял запрос. Читайте состояние модуля методом GET по адресу из Location.",
             "headers": {
               "Cache-Control": {
                 "schema": {
                   "type": "string",
                   "const": "private, no-store"
                 }
+              },
+              "Location": {
+                "required": true,
+                "description": "Относительный адрес модуля на этом сервере, включая повторный ответ с тем же ключом.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                },
+                "example": "/api/modules/7"
               }
             },
             "content": {
@@ -1357,7 +1373,7 @@
       "get": {
         "operationId": "getLLMRequest",
         "summary": "Состояние запроса LLM",
-        "description": "Временно без проверки пользователя и JWT. Любой существующий запрос доступен по request_id, проверки владельца нет; отсутствующий ID даёт 404. Поллинг раз в 2–3 секунды; HTTP 200 также при failed. Возвращает статус, целевые ID и безопасную ошибку (code, message, retryable). Автоматические повторы timeout/429/5xx ограничены LLM_MAX_ATTEMPTS. Параметры, provider/model, исходный ввод и raw result скрыты. Подробности: [LLM_MATERIALS.md](../LLM_MATERIALS.md).",
+        "description": "Дополнительный маршрут для просмотра фоновой работы по request_id, включая безопасную ошибку. Основной сценарий использует GET по адресу материала или модуля из Location. Общий режим без JWT. При failed сервер отвечает 200. Автоматические повторы временных ошибок ограничены LLM_MAX_ATTEMPTS. Служебные параметры вызова модели скрыты.",
         "responses": {
           "200": {
             "description": "Успех.",
@@ -2169,6 +2185,10 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "error": {
+            "description": "При failed может содержать причину завершения фоновой обработки.",
+            "$ref": "#/components/schemas/Failure"
           }
         },
         "required": [
@@ -2285,19 +2305,10 @@
           "types": {
             "type": "array",
             "items": {
-              "type": "string",
-              "enum": [
-                "vocabulary_gap",
-                "vocabulary_matching_translation",
-                "vocabulary_matching_definition",
-                "vocabulary_context_choice",
-                "grammar_brackets",
-                "grammar_tense",
-                "grammar_word_order"
-              ]
+              "$ref": "#/components/schemas/ExerciseType"
             },
             "minItems": 1,
-            "maxItems": 7,
+            "maxItems": 9,
             "uniqueItems": true
           }
         },
@@ -2314,7 +2325,7 @@
             "title": "Algorithms and code",
             "topic_id": 1,
             "difficulty": "B1",
-            "count": 7,
+            "count": 9,
             "types": [
               "vocabulary_gap",
               "vocabulary_matching_translation",
@@ -2322,7 +2333,9 @@
               "vocabulary_context_choice",
               "grammar_brackets",
               "grammar_tense",
-              "grammar_word_order"
+              "grammar_word_order",
+              "comprehension_question",
+              "reasoning_question"
             ]
           }
         ]
@@ -3586,6 +3599,10 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "error": {
+            "description": "При failed может содержать причину завершения фоновой обработки.",
+            "$ref": "#/components/schemas/Failure"
           }
         },
         "required": [

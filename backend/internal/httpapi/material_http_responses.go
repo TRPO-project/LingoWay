@@ -17,18 +17,19 @@ import (
 // адрес источника и служебные метаданные, которых нет в HTTP-контракте.
 // На текущем этапе подготовленный ExtractedText доступен по ID без проверки пользователя.
 type materialResponse struct {
-	ID            int64                 `json:"id"`
-	Title         string                `json:"title"`
-	TopicID       *int64                `json:"topic_id"`
-	Kind          models.MaterialKind   `json:"kind"`
-	Status        models.MaterialStatus `json:"status"`
-	Level         *models.CEFRLevel     `json:"level"`
-	ExtractedText *string               `json:"extracted_text"`
-	CreatedAt     time.Time             `json:"created_at"`
+	ID            int64                      `json:"id"`
+	Title         string                     `json:"title"`
+	TopicID       *int64                     `json:"topic_id"`
+	Kind          models.MaterialKind        `json:"kind"`
+	Status        models.MaterialStatus      `json:"status"`
+	Level         *models.CEFRLevel          `json:"level"`
+	ExtractedText *string                    `json:"extracted_text"`
+	CreatedAt     time.Time                  `json:"created_at"`
+	Error         *llmRequestFailureResponse `json:"error,omitempty"`
 }
 
 func newMaterialResponse(material *llm.Material) materialResponse {
-	return materialResponse{
+	response := materialResponse{
 		ID:            material.ID,
 		Title:         material.Title,
 		TopicID:       material.TopicID,
@@ -38,6 +39,10 @@ func newMaterialResponse(material *llm.Material) materialResponse {
 		ExtractedText: material.ExtractedText,
 		CreatedAt:     material.CreatedAt,
 	}
+	if material.Status == models.MaterialFailed {
+		response.Error = describeLLMRequestFailure(models.LLMPrepareMaterial, material.ErrorCode)
+	}
+	return response
 }
 
 // llmRequestFailureResponse описывает результат неудачной фоновой обработки. Retryable
@@ -76,13 +81,12 @@ func newLLMRequestResponse(llmRequest *llm.LLMRequest) llmRequestResponse {
 	// Сообщение из ErrorMessage не используем: оно может содержать внутренние
 	// сведения. Только известные коды получают заранее заданное безопасное описание.
 	if llmRequest.Status == models.LLMFailed {
-		safeFailure := describeLLMRequestFailure(llmRequest.Operation, llmRequest.ErrorCode)
-		response.Error = &safeFailure
+		response.Error = describeLLMRequestFailure(llmRequest.Operation, llmRequest.ErrorCode)
 	}
 	return response
 }
 
-func describeLLMRequestFailure(operation models.LLMOperation, errorCode *string) llmRequestFailureResponse {
+func describeLLMRequestFailure(operation models.LLMOperation, errorCode *string) *llmRequestFailureResponse {
 	failedMessage := "Не удалось подготовить материал."
 	invalidInputMessage := "Материал не подходит для обработки."
 	cancelledMessage := "Обработка материала отменена."
@@ -92,23 +96,23 @@ func describeLLMRequestFailure(operation models.LLMOperation, errorCode *string)
 		cancelledMessage = "Генерация упражнений отменена."
 	}
 	if errorCode == nil {
-		return llmRequestFailureResponse{Code: "PROCESSING_FAILED", Message: failedMessage}
+		return &llmRequestFailureResponse{Code: "PROCESSING_FAILED", Message: failedMessage}
 	}
 	switch *errorCode {
 	case "LLM_TIMEOUT", "LLM_RATE_LIMITED", "LLM_UNAVAILABLE":
-		return llmRequestFailureResponse{Code: *errorCode, Message: "Сервис модели временно недоступен.", Retryable: true}
+		return &llmRequestFailureResponse{Code: *errorCode, Message: "Сервис модели временно недоступен.", Retryable: true}
 	case "LLM_NOT_CONFIGURED":
-		return llmRequestFailureResponse{Code: *errorCode, Message: "Подключение к модели не настроено."}
+		return &llmRequestFailureResponse{Code: *errorCode, Message: "Подключение к модели не настроено."}
 	case "LLM_INVALID_RESPONSE":
-		return llmRequestFailureResponse{Code: *errorCode, Message: "Модель вернула некорректный ответ."}
+		return &llmRequestFailureResponse{Code: *errorCode, Message: "Модель вернула некорректный ответ."}
 	case "LLM_PROVIDER_ERROR":
-		return llmRequestFailureResponse{Code: *errorCode, Message: "Сервис модели отклонил запрос."}
+		return &llmRequestFailureResponse{Code: *errorCode, Message: "Сервис модели отклонил запрос."}
 	case "LLM_INVALID_INPUT":
-		return llmRequestFailureResponse{Code: *errorCode, Message: invalidInputMessage}
+		return &llmRequestFailureResponse{Code: *errorCode, Message: invalidInputMessage}
 	case "LLM_CANCELLED":
-		return llmRequestFailureResponse{Code: *errorCode, Message: cancelledMessage}
+		return &llmRequestFailureResponse{Code: *errorCode, Message: cancelledMessage}
 	default:
-		return llmRequestFailureResponse{Code: "PROCESSING_FAILED", Message: failedMessage}
+		return &llmRequestFailureResponse{Code: "PROCESSING_FAILED", Message: failedMessage}
 	}
 }
 

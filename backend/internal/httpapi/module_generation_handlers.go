@@ -16,7 +16,8 @@ import (
 // ModuleGenerationService ставит создание модуля в очередь и выдаёт упражнения
 // опубликованного модуля из материала. Проверка доступа к каталогу остаётся в сервисе.
 type ModuleGenerationService interface {
-	CreateGeneratedModule(ctx context.Context, materialID int64, idempotencyKey string, input materials.CreateGeneratedModuleInput) (*topics.Module, *llm.LLMRequest, error)
+	CreateGeneratedModule(ctx context.Context, materialID int64, idempotencyKey string, input materials.CreateGeneratedModuleInput) (*materials.GeneratedModuleDetails, *llm.LLMRequest, error)
+	GetGeneratedModuleByID(ctx context.Context, moduleID int64) (*materials.GeneratedModuleDetails, error)
 	ListGeneratedModuleExercises(ctx context.Context, moduleID int64, limit, offset int) (*topics.Module, []topics.Exercise, error)
 }
 
@@ -33,7 +34,7 @@ func (handler moduleGenerationHTTPHandler) createGeneratedModule(requestContext 
 		writeModuleGenerationServiceError(requestContext, materials.ErrMaterialPreparationUnavailable)
 		return
 	}
-	materialID, valid := parsePositiveResourceID(requestContext)
+	materialID, valid := parsePositiveResourceID(requestContext, "material_id")
 	if !valid {
 		return
 	}
@@ -57,7 +58,25 @@ func (handler moduleGenerationHTTPHandler) createGeneratedModule(requestContext 
 		writeModuleGenerationServiceError(requestContext, err)
 		return
 	}
+	requestContext.Header("Location", "/api/modules/"+strconv.FormatInt(module.ID, 10))
 	requestContext.JSON(http.StatusAccepted, gin.H{"module": newGeneratedModuleResponse(module), "llm_request": newLLMRequestResponse(llmRequest)})
+}
+
+func (handler moduleGenerationHTTPHandler) getGeneratedModuleByID(requestContext *gin.Context) {
+	if handler.service == nil {
+		writeModuleGenerationServiceError(requestContext, materials.ErrMaterialPreparationUnavailable)
+		return
+	}
+	moduleID, valid := parsePositiveResourceID(requestContext, "module_id")
+	if !valid {
+		return
+	}
+	details, err := handler.service.GetGeneratedModuleByID(requestContext.Request.Context(), moduleID)
+	if err != nil {
+		writeModuleGenerationServiceError(requestContext, err)
+		return
+	}
+	requestContext.JSON(http.StatusOK, newGeneratedModuleResponse(details))
 }
 
 func (handler moduleGenerationHTTPHandler) listGeneratedModuleExercises(requestContext *gin.Context) {
@@ -65,7 +84,7 @@ func (handler moduleGenerationHTTPHandler) listGeneratedModuleExercises(requestC
 		writeModuleGenerationServiceError(requestContext, materials.ErrMaterialPreparationUnavailable)
 		return
 	}
-	moduleID, valid := parsePositiveResourceID(requestContext)
+	moduleID, valid := parsePositiveResourceID(requestContext, "module_id")
 	if !valid {
 		return
 	}

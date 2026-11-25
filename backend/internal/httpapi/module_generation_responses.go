@@ -3,6 +3,7 @@ package httpapi
 import (
 	"time"
 
+	"lingoway/internal/materials"
 	"lingoway/internal/models"
 	"lingoway/internal/models/topics"
 )
@@ -10,20 +11,21 @@ import (
 // generatedModuleResponse содержит публичные поля модуля, включая число уже
 // сохранённых упражнений. Технический владелец и сами упражнения в ответ не входят.
 type generatedModuleResponse struct {
-	ID            int64                   `json:"id"`
-	Title         string                  `json:"title"`
-	TopicID       int64                   `json:"topic_id"`
-	Difficulty    models.CEFRLevel        `json:"difficulty"`
-	MaterialID    *int64                  `json:"material_id"`
-	Visibility    models.ModuleVisibility `json:"visibility"`
-	Status        models.ModuleStatus     `json:"status"`
-	ExerciseCount int                     `json:"exercise_count"`
-	CreatedAt     time.Time               `json:"created_at"`
-	PublishedAt   *time.Time              `json:"published_at"`
+	ID            int64                      `json:"id"`
+	Title         string                     `json:"title"`
+	TopicID       int64                      `json:"topic_id"`
+	Difficulty    models.CEFRLevel           `json:"difficulty"`
+	MaterialID    *int64                     `json:"material_id"`
+	Visibility    models.ModuleVisibility    `json:"visibility"`
+	Status        models.ModuleStatus        `json:"status"`
+	ExerciseCount int64                      `json:"exercise_count"`
+	CreatedAt     time.Time                  `json:"created_at"`
+	PublishedAt   *time.Time                 `json:"published_at"`
+	Error         *llmRequestFailureResponse `json:"error,omitempty"`
 }
 
-func newGeneratedModuleResponse(module *topics.Module) generatedModuleResponse {
-	return generatedModuleResponse{
+func newGeneratedModuleResponse(module *materials.GeneratedModuleDetails) generatedModuleResponse {
+	response := generatedModuleResponse{
 		ID:            module.ID,
 		Title:         module.Title,
 		TopicID:       module.TopicID,
@@ -31,10 +33,14 @@ func newGeneratedModuleResponse(module *topics.Module) generatedModuleResponse {
 		MaterialID:    module.MaterialID,
 		Visibility:    module.Visibility,
 		Status:        module.Status,
-		ExerciseCount: len(module.Exercises),
+		ExerciseCount: module.ExerciseCount,
 		CreatedAt:     module.CreatedAt,
 		PublishedAt:   module.PublishedAt,
 	}
+	if module.Status == models.ModuleFailed {
+		response.Error = describeLLMRequestFailure(models.LLMGenerateModule, module.ErrorCode)
+	}
+	return response
 }
 
 // generatedExerciseResponse показывает задание ученику. Уровень и тема берутся

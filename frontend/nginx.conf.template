@@ -1,0 +1,14 @@
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+
+    location /api/ {
+        # Импорт принимает файл до 2 МиБ плюс поля multipart.
+        client_max_body_size 3m;
+        proxy_pass ${API_PROXY_TARGET};
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
