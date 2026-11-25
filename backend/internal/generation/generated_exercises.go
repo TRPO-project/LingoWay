@@ -15,7 +15,7 @@ import (
 const (
 	minGeneratedExerciseCount  = 2
 	maxGeneratedExerciseCount  = 30
-	generatedExerciseTypeCount = 7
+	generatedExerciseTypeCount = 9
 )
 
 // GeneratedExercise содержит проверенное задание для записи в БД.
@@ -36,7 +36,7 @@ func PlanExerciseCounts(count int, types []models.ExerciseType) ([]int, error) {
 		return nil, errors.New("exercise count must be between 2 and 30")
 	}
 	if len(types) == 0 || len(types) > generatedExerciseTypeCount || len(types) > count {
-		return nil, errors.New("exercise types must contain 1 to 7 supported types and fit the exercise count")
+		return nil, errors.New("exercise types must contain 1 to 9 supported types and fit the exercise count")
 	}
 	counts := make([]int, len(types))
 	seen := make(map[models.ExerciseType]bool, len(types))
@@ -62,14 +62,16 @@ func generatedExerciseFormat(exerciseType models.ExerciseType) string {
 		return "matching"
 	case models.ExerciseGrammarWordOrder:
 		return "word_order"
+	case models.ExerciseComprehensionQuestion, models.ExerciseReasoningQuestion:
+		return "free_text"
 	default:
 		return ""
 	}
 }
 
 // parseGeneratedExercisesJSON сверяет результат с планом, проверенным до вызова модели.
-// Группы идут в порядке types, порядок внутри каждого типа задаёт модель.
-func parseGeneratedExercisesJSON(completionContent string, types []models.ExerciseType, counts []int, total int) ([]GeneratedExercise, error) {
+// Группы идут в порядке входного списка типов, порядок внутри группы задаёт модель.
+func parseGeneratedExercisesJSON(completionContent string, input ExerciseGenerationInput, counts []int) ([]GeneratedExercise, error) {
 	invalidResponse := &LLMProviderError{Code: "LLM_INVALID_RESPONSE"}
 	if !utf8.ValidString(completionContent) {
 		return nil, invalidResponse
@@ -79,18 +81,18 @@ func parseGeneratedExercisesJSON(completionContent string, types []models.Exerci
 		return nil, invalidResponse
 	}
 	var rawExercises []json.RawMessage
-	if json.Unmarshal(root["exercises"], &rawExercises) != nil || len(rawExercises) != total {
+	if json.Unmarshal(root["exercises"], &rawExercises) != nil || len(rawExercises) != input.Count {
 		return nil, invalidResponse
 	}
 
-	groupIndices := make(map[models.ExerciseType]int, len(types))
-	groups := make([][]GeneratedExercise, len(types))
-	for index, exerciseType := range types {
+	groupIndices := make(map[models.ExerciseType]int, len(input.Types))
+	groups := make([][]GeneratedExercise, len(input.Types))
+	for index, exerciseType := range input.Types {
 		groupIndices[exerciseType] = index
 		groups[index] = make([]GeneratedExercise, 0, counts[index])
 	}
 	for _, rawExercise := range rawExercises {
-		exercise, ok := parseGeneratedExercise(rawExercise)
+		exercise, ok := parseGeneratedExercise(rawExercise, input.SourceText)
 		if !ok {
 			return nil, invalidResponse
 		}
@@ -100,14 +102,14 @@ func parseGeneratedExercisesJSON(completionContent string, types []models.Exerci
 		}
 		groups[index] = append(groups[index], exercise)
 	}
-	result := make([]GeneratedExercise, 0, total)
+	result := make([]GeneratedExercise, 0, input.Count)
 	for _, group := range groups {
 		result = append(result, group...)
 	}
 	return result, nil
 }
 
-func parseGeneratedExercise(raw json.RawMessage) (GeneratedExercise, bool) {
+func parseGeneratedExercise(raw json.RawMessage, sourceText string) (GeneratedExercise, bool) {
 	fields, ok := generatedObjectFields(raw, []string{"type", "instruction", "question_text", "content", "answer_key", "explanation"})
 	if !ok {
 		return GeneratedExercise{}, false
@@ -128,6 +130,8 @@ func parseGeneratedExercise(raw json.RawMessage) (GeneratedExercise, bool) {
 		content, answerKey, ok = parseGeneratedMatching(fields["content"], fields["answer_key"])
 	case "word_order":
 		content, answerKey, ok = parseGeneratedWordOrder(fields["content"], fields["answer_key"])
+	case "free_text":
+		content, answerKey, ok = parseGeneratedQuestion(fields["content"], fields["answer_key"], sourceText)
 	default:
 		return GeneratedExercise{}, false
 	}

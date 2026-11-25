@@ -64,7 +64,7 @@ func (worker *ModuleGenerationWorker) processNextModuleGenerationRequest(ctx con
 
 func (worker *ModuleGenerationWorker) loadExerciseGenerationInput(ctx context.Context, request *llm.LLMRequest) (generation.ExerciseGenerationInput, error) {
 	var input generation.ExerciseGenerationInput
-	if request.PromptVersion != generation.ExerciseGenerationPromptV1 {
+	if !generation.SupportsExerciseGenerationPrompt(request.PromptVersion) {
 		return input, &generation.LLMProviderError{Code: "LLM_PROMPT_UNSUPPORTED"}
 	}
 	var parameters moduleGenerationParameters

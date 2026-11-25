@@ -69,6 +69,7 @@ func (handler materialHTTPHandler) createTextMaterial(requestContext *gin.Contex
 		writeMaterialServiceError(requestContext, err)
 		return
 	}
+	requestContext.Header("Location", "/api/materials/"+strconv.FormatInt(material.ID, 10))
 	requestContext.JSON(http.StatusAccepted, gin.H{"material": newMaterialResponse(material), "llm_request": newLLMRequestResponse(llmRequest)})
 }
 
@@ -100,7 +101,7 @@ func (handler materialHTTPHandler) getMaterialByID(requestContext *gin.Context) 
 		writeMaterialServiceError(requestContext, materials.ErrMaterialPreparationUnavailable)
 		return
 	}
-	materialID, materialIDIsValid := parsePositiveResourceID(requestContext)
+	materialID, materialIDIsValid := parsePositiveResourceID(requestContext, "material_id")
 	if !materialIDIsValid {
 		return
 	}
@@ -118,7 +119,7 @@ func (handler materialHTTPHandler) getLLMRequestByID(requestContext *gin.Context
 		writeMaterialServiceError(requestContext, materials.ErrMaterialPreparationUnavailable)
 		return
 	}
-	llmRequestID, requestIDIsValid := parsePositiveResourceID(requestContext)
+	llmRequestID, requestIDIsValid := parsePositiveResourceID(requestContext, "request_id")
 	if !requestIDIsValid {
 		return
 	}
@@ -195,8 +196,8 @@ func writeInvalidMultipartError(requestContext *gin.Context, err error) {
 	writeAPIError(requestContext, http.StatusBadRequest, "INVALID_MULTIPART", "Не удалось прочитать загруженный файл.")
 }
 
-func parsePositiveResourceID(requestContext *gin.Context) (int64, bool) {
-	resourceID, err := strconv.ParseInt(requestContext.Param("id"), 10, 64)
+func parsePositiveResourceID(requestContext *gin.Context, parameterName string) (int64, bool) {
+	resourceID, err := strconv.ParseInt(requestContext.Param(parameterName), 10, 64)
 	if err != nil || resourceID <= 0 {
 		writeAPIError(requestContext, http.StatusBadRequest, "INVALID_ID", "Идентификатор должен быть положительным целым числом.")
 		return 0, false

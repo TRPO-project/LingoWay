@@ -1,6 +1,6 @@
 # Модуль материалов и подключения LLM
 
-Модуль принимает английский текст, сохраняет его в PostgreSQL и через языковую модель определяет сложность по шкале CEFR от A1 до C2. По готовому материалу можно сгенерировать лексические и грамматические упражнения.
+Модуль принимает английский текст, сохраняет его в PostgreSQL и через языковую модель определяет сложность по шкале CEFR от A1 до C2. По готовому материалу можно сгенерировать упражнения на лексику и грамматику, вопросы на понимание текста и рассуждение.
 
 Полный путь от запуска сервера до получения упражнений показан в одном примере. [Сценарий в PowerShell](#пример-полного-сценария-в-powershell)
 
@@ -10,9 +10,9 @@
 
 Обязательные связи с таблицей `users` сохранены для целостности БД. При создании материала сервис сам назначает общего технического владельца. Клиент не передаёт ID пользователя и не создаёт эту учётную запись вручную. Технический владелец связывает записи БД, но не даёт разграничения доступа между клиентами.
 
-Для каждого нового POST создавайте случайный UUID. Храните ключ вместе с адресом и телом запроса, чтобы при повторной отправке получить прежнюю пару записей. [Как повторять запрос](#повторная-отправка-и-общий-ключ)
+Для каждого нового POST создания материала или генерации создавайте случайный UUID. Храните ключ вместе с адресом и телом запроса, чтобы при повторной отправке получить прежнюю пару записей. [Как повторять запрос](#повторная-отправка-и-общий-ключ)
 
-Работают приём текста, предварительный импорт TXT/Markdown/DOCX, определение CEFR, генерация закрытых упражнений и ограниченные повторы ошибок.
+Работают приём текста, предварительный импорт TXT/Markdown/DOCX, определение CEFR, генерация упражнений девяти типов и ограниченные повторы ошибок.
 
 ## Короткий словарь
 
@@ -29,6 +29,8 @@
 | Технический владелец | Общая служебная запись пользователя для обязательных связей БД; не авторизация клиента |
 
 ## Запуск
+
+Для проверки через браузер заполните настройки провайдера в корневом `.env`, запустите `docker compose up -d --build` и откройте [страницу генерации](http://127.0.0.1:5173). Введите английский текст или импортируйте TXT, MD либо DOCX. Выберите параметры упражнений и запустите генерацию. Страница дождётся готовности материала и модуля, затем откроет задания. Ответы можно вводить в браузере. Оценивание ответов ученика на сервере пока не реализовано. [Локальный запуск интерфейса и API](../README.md#запуск)
 
 Понадобятся Go версии из `backend/go.mod` и PostgreSQL. В проекте PostgreSQL запускается через Docker Compose; также можно указать уже работающую БД.
 
@@ -93,40 +95,21 @@ Invoke-RestMethod http://localhost:8080/api/health
 
 ## Как проходит обработка
 
-1. Запустите PostgreSQL и сервер с настроенным ключом провайдера. Подготовьте английский текст. Для TXT, Markdown или DOCX можно сначала вызвать `POST /api/materials/extract`. Возьмите поле `text` из результата предварительного просмотра. Запись с ID появится на следующем шаге. [Запуск](#запуск) · [Импорт файла](#предварительный-импорт-файла)
-2. Отправьте `POST /api/materials` с `kind`, `title`, `text` и новым UUID в заголовке `Idempotency-Key`. Сервер сам присвоит ID материалу и запросу подготовки. HTTP 202 сразу вернёт `material.id` и `llm_request.id`. Сохраните оба числа. [Тело и ответ POST](#создание-материала)
-3. Опрашивайте `GET /api/llm-requests/{request_id}` по ID запроса подготовки. Когда он станет `succeeded`, прочитайте `GET /api/materials/{material_id}`. После успеха материал уже в `ready`, а в ответе есть уровень CEFR в `level` и нормализованный текст в `extracted_text`. [Статусы и ошибки](#чтение-статуса-и-результата)
-4. Выберите существующую тему и отправьте `POST /api/materials/{material_id}/modules`. В адрес подставьте `material.id` из шага 2. Укажите в теле `title`, `topic_id`, `difficulty`, `count` и `types`. Для этого POST создайте отдельный UUID. В HTTP 202 будут `module.id` и ID нового запроса в `llm_request.id`. Подготовленный текст воркер загрузит по ID материала. [Тело и ответ генерации](#генерация-лексики-и-грамматики)
-5. Опрашивайте тот же маршрут `GET /api/llm-requests/{request_id}` по новому `llm_request.id` из шага 4. При `succeeded` модуль готов. При `failed` остановите опрос и прочитайте `error.code` и `error.message`.
-6. Получите упражнения через `GET /api/modules/{module_id}/exercises`. В адрес подставьте `module.id` из шага 4. При `has_more: true` увеличьте `offset` на значение `limit` и запросите следующую страницу. [Формат выдачи](#чтение-упражнений)
+1. Отправьте английский текст в `POST /api/materials`. ID в теле запроса не нужен. Сервер создаёт материал, ставит подготовку в очередь и возвращает HTTP 202. В заголовке `Location` будет адрес материала, например `/api/materials/12`. Для TXT, MD или DOCX сначала получите текст через предварительный импорт. [Создание материала](#создание-материала) · [Импорт файла](#предварительный-импорт-файла)
+2. Читайте материал через `GET` по адресу из `Location` раз в 2–3 секунды. Пока `status` равен `pending`, модель определяет уровень. При `ready` тот же ответ содержит `level` и подготовленный текст в `extracted_text`.
+3. Добавьте `/modules` к адресу готового материала и отправьте `POST /api/materials/12/modules`. Передайте тему, название, сложность, число и типы упражнений. Для этой операции создайте новый `Idempotency-Key`. Сервер ответит HTTP 202 и вернёт адрес созданного модуля в новом заголовке `Location`, например `/api/modules/7`. [Параметры генерации](#генерация-упражнений-и-вопросов)
+4. Читайте модуль через `GET /api/modules/7`. Пока `status` равен `generating`, генерация продолжается. При `ready` добавьте к адресу модуля `/exercises` и получите упражнения. При `failed` на любом из этапов остановите опрос. Поле `error`, если оно есть, содержит причину. [Чтение упражнений](#чтение-упражнений)
 
 ### Откуда берутся ID
 
-| Значение | Откуда взять | Куда передать |
-|---|---|---|
-| ID материала, например `12` | `material.id` в ответе на `POST /api/materials` | `GET /api/materials/12` и `POST /api/materials/12/modules` |
-| ID запроса подготовки, например `34` | `llm_request.id` в ответе на `POST /api/materials` | `GET /api/llm-requests/34` |
-| ID темы, например `1` | ID существующей строки из `topics` | В JSON-поле `topic_id` при генерации. При создании материала поле необязательное |
-| ID модуля, например `7` | `module.id` в ответе на `POST /api/materials/12/modules` | `GET /api/modules/7/exercises` |
-| ID запроса генерации, например `35` | `llm_request.id` в ответе на `POST /api/materials/12/modules` | `GET /api/llm-requests/35` |
-| ID упражнения | `items[].id` в ответе на чтение упражнений | Идентификатор отдельного упражнения в ответе |
-| `Idempotency-Key` | Клиент создаёт случайный UUID перед новой операцией | Только заголовок POST. Для повтора того же запроса используется сохранённый UUID |
+| Что хранит клиент | Для чего это нужно |
+|---|---|
+| Адрес материала из первого `Location` | Прочитать текст и CEFR, запустить один или несколько модулей по этому материалу |
+| Адрес модуля из второго `Location` | Дождаться упражнений и прочитать их. Поле `material_id` в модуле указывает на исходный материал |
+| `topic_id` | ID существующей учебной темы для набора упражнений. Вы выбираете её до запуска генерации |
+| `Idempotency-Key` | UUID, который клиент создаёт перед каждым новым действием. При повторе того же POST используйте сохранённый ключ |
 
-Числа в таблице условные. В URL подставляйте значение из своего ответа без фигурных скобок.
-
-```mermaid
-flowchart TD
-    F["TXT / MD / DOCX"] --> X["POST /api/materials/extract"]
-    X -->|text| C["POST /api/materials"]
-    T["Английский текст"] --> C
-    C -->|llm_request.id| P["Опрос запроса подготовки"]
-    P -->|succeeded| R["GET /api/materials/{material_id}"]
-    R -->|material.id и level| G["POST /api/materials/{material_id}/modules"]
-    G -->|новый llm_request.id| Q["Опрос запроса генерации"]
-    Q -->|succeeded| E["GET /api/modules/{module_id}/exercises"]
-    P -->|failed| Z["Прочитать код ошибки"]
-    Q -->|failed| Z
-```
+В примере `12` и `7` — номера двух разных записей. Один материал может дать несколько наборов упражнений, например по лексике и по грамматике. Сервер сам связывает каждый модуль с материалом из адреса POST. Оба ответа POST также содержат `llm_request` для совместимости. Его ID нужен для отдельного просмотра работы очереди.
 
 ## HTTP API
 
@@ -134,12 +117,13 @@ flowchart TD
 
 | Метод и путь | Результат |
 |---|---|
-| `POST /api/materials` | `202`: объекты `material` и `llm_request` |
-| `GET /api/materials/{material_id}` | `200`: материал, а после успеха также `level` и `extracted_text` |
-| `GET /api/llm-requests/{request_id}` | `200`: состояние запроса, связанные ID и ошибка обработки при её наличии |
-| `POST /api/materials/extract` | `200`: текст загруженного файла и число символов; ничего не сохраняется |
-| `POST /api/materials/{material_id}/modules` | `202`: объекты `module` и `llm_request` |
-| `GET /api/modules/{module_id}/exercises` | `200`: страница заданий готового сгенерированного модуля |
+| `POST /api/materials` | `202` и `Location` материала. В теле `material` и `llm_request` |
+| `GET /api/materials/{material_id}` | `200` и текущий материал. При `ready` готовы `level` и `extracted_text` |
+| `POST /api/materials/{material_id}/modules` | `202` и `Location` модуля. В теле `module` и `llm_request` |
+| `GET /api/modules/{module_id}` | `200` и модуль из этого процесса генерации, включая `status` и `material_id`. Для отсутствующего или созданного другим способом модуля возвращается `404` |
+| `GET /api/modules/{module_id}/exercises` | `200` и страница упражнений готового модуля |
+| `POST /api/materials/extract` | `200` и текст загруженного файла для предварительного просмотра |
+| `GET /api/llm-requests/{request_id}` | `200` и состояние отдельной работы очереди. Дополнительный маршрут для диагностики и прежних клиентов |
 
 ### Создание материала
 
@@ -192,11 +176,11 @@ Idempotency-Key: 16c061c4-b373-42b5-b4dc-6fe247aeeb04
 }
 ```
 
-HTTP 202 означает, что сервер принял запрос. При первом POST материал и запрос уже сохранены, а подготовка поставлена в очередь. `material.id` идентифицирует текст, `llm_request.id` идентифицирует работу по его подготовке. В этом ответе `module_id` и `answer_id` равны `null`.
+В этом примере ответ содержит заголовок `Location: /api/materials/12`. HTTP 202 означает, что запись сохранена и обработка начнётся в фоне. Следующий запрос клиента — `GET /api/materials/12`.
 
 ### Повторная отправка и общий ключ
 
-Перед новой операцией создайте UUID и сохраните его вместе с адресом и телом POST. Если соединение оборвалось до получения ответа, повторите тот же POST с прежним UUID, адресом и телом. Сервер вернёт исходные ID и текущие статусы, если первый запрос уже сохранён.
+Перед новой операцией создайте UUID и сохраните его вместе с адресом и телом POST. Если соединение оборвалось до получения ответа, повторите тот же POST с прежним UUID, адресом и телом. Сервер вернёт прежний `Location` и текущие статусы, если первый запрос уже сохранён.
 
 Для создания материала сравниваются нормализованные `title`, `text`, `kind` и `topic_id`. Для генерации сравниваются ID материала в адресе, название, тема, уровень, количество и порядок типов упражнений. Тот же ключ с другим вводом в рамках одной операции и владельца возвращает HTTP 409.
 
@@ -213,17 +197,12 @@ HTTP 202 означает, что сервер принял запрос. При
 
 ### Чтение статуса и результата
 
-Для примера выше запрос подготовки имеет ID `34`, а материал — `12`.
+Читайте `Location` на том же сервере. Обе операции чтения возвращают HTTP 200 и текущий `status` даже при ошибке обработки. Таблица показывает, что делать с ответом.
 
-```http
-GET /api/llm-requests/34 HTTP/1.1
-```
-
-```http
-GET /api/materials/12 HTTP/1.1
-```
-
-Опрашивайте состояние раз в 2–3 секунды. Пока оно `queued` или `running`, работа не завершена. После `succeeded` или `failed` опрос нужно остановить.
+| Адрес | Подождать и повторить GET | Успех | Ошибка |
+|---|---|---|---|
+| `/api/materials/12` | `pending` | `ready` — взять `level` и запустить генерацию | `failed` — остановиться |
+| `/api/modules/7` | `generating` | `ready` — перейти на `/api/modules/7/exercises` | `failed` — остановиться |
 
 Пример готового материала:
 
@@ -242,43 +221,21 @@ GET /api/materials/12 HTTP/1.1
 
 Уровень B1 здесь условный: фактическая оценка зависит от модели. Исходный текст сохраняется целиком.
 
-Пример успешного запроса подготовки:
+При `failed` материал или модуль может содержать сведения о последней ошибке в поле `error`. Пример полей такого ответа.
 
 ```json
 {
-  "id": 34,
-  "operation": "prepare_material",
-  "status": "succeeded",
-  "material_id": 12,
-  "module_id": null,
-  "answer_id": null,
-  "error": null,
-  "created_at": "2026-10-28T10:00:00Z",
-  "finished_at": "2026-10-28T10:00:03Z"
-}
-```
-
-Пример запроса, окончательно завершившегося ошибкой:
-
-```json
-{
-  "id": 34,
-  "operation": "prepare_material",
+  "id": 12,
   "status": "failed",
-  "material_id": 12,
-  "module_id": null,
-  "answer_id": null,
   "error": {
     "code": "LLM_TIMEOUT",
     "message": "Сервис модели временно недоступен.",
     "retryable": true
-  },
-  "created_at": "2026-10-28T10:00:00Z",
-  "finished_at": "2026-10-28T10:00:20Z"
+  }
 }
 ```
 
-GET статуса возвращает HTTP 200 и при `failed`, потому что прочитать запись удалось. `retryable=true` описывает временную причину сбоя. При `failed` сервер уже закончил автоматические попытки. Повтор POST со старым ключом вернёт ту же запись. Чтобы запустить подготовку заново, отправьте `POST /api/materials` с новым UUID. Чтобы заново сгенерировать упражнения по готовому тексту, отправьте `POST /api/materials/{material_id}/modules` с новым UUID. В обоих случаях сервер создаст новую пару записей.
+`failed` означает, что автоматическая обработка закончилась. `retryable: true` указывает на временную причину. Повтор POST со старым ключом вернёт прежний ресурс. Если нужен новый запуск подготовки или генерации, повторите соответствующий POST с новым UUID. Появится новый материал или модуль со своим адресом.
 
 Основные коды фоновой ошибки:
 
@@ -311,7 +268,7 @@ curl.exe -X POST http://localhost:8080/api/materials/extract -F "file=@material.
 
 ### Ошибки HTTP-запросов
 
-Они имеют форму `{"error":{"code":"...","message":"..."}}` без поля `retryable`. Это ошибки самого HTTP-ввода или работы сервиса; их нужно отличать от `error` внутри успешно прочитанного запроса LLM.
+Они имеют форму `{"error":{"code":"...","message":"..."}}` без поля `retryable`. Это ошибки самого HTTP-ввода или работы сервиса; их нужно отличать от `error` внутри успешно прочитанного материала или модуля.
 
 | HTTP | Коды | Когда возвращается |
 |---|---|---|
@@ -319,7 +276,7 @@ curl.exe -X POST http://localhost:8080/api/materials/extract -F "file=@material.
 | `400` | `INVALID_PAGINATION` | Некорректные `limit` или `offset` при чтении упражнений |
 | `404` | `NOT_FOUND` | Не найдены материал, запрос LLM, тема или модуль, созданный генерацией |
 | `409` | `IDEMPOTENCY_CONFLICT` | Прежний ключ использован с другим вводом |
-| `409` | `MATERIAL_NOT_READY`, `MODULE_NOT_READY` | Материал пока недоступен для генерации или модуль пока недоступен для чтения |
+| `409` | `MATERIAL_NOT_READY`, `MODULE_NOT_READY` | Материал пока недоступен для генерации или упражнения модуля пока недоступны для чтения |
 | `413` | `MATERIAL_TOO_LARGE`, `REQUEST_TOO_LARGE` | Превышен размер текста, файла или тела запроса |
 | `415` | `UNSUPPORTED_MEDIA_TYPE`, `UNSUPPORTED_FILE_FORMAT` | Неподдерживаемый Content-Type либо расширение файла |
 | `422` | `INVALID_TEXT`, `INVALID_FILE`, `INVALID_INPUT`, `UNSUPPORTED_MATERIAL_KIND` | Неверные данные материала, файла или параметры генерации |
@@ -406,9 +363,11 @@ curl.exe -X POST http://localhost:8080/api/materials/extract -F "file=@material.
 | [`backend/internal/generation/chat_completion_response.go`](../backend/internal/generation/chat_completion_response.go) | Ограниченное чтение и разбор ответа провайдера |
 | [`backend/internal/generation/exercise_generation_client.go`](../backend/internal/generation/exercise_generation_client.go) | Формирование запроса на генерацию |
 | [`backend/internal/generation/generated_exercises.go`](../backend/internal/generation/generated_exercises.go) | Распределение типов и проверка набора упражнений |
+| [`backend/internal/generation/generated_question.go`](../backend/internal/generation/generated_question.go) | Проверка отрывка, слов для подсказки и критериев открытого вопроса |
 | [`backend/internal/generation/prompts/prepare-material-v1.txt`](../backend/internal/generation/prompts/prepare-material-v1.txt) | Инструкция для ранее поставленных запросов |
 | [`backend/internal/generation/prompts/prepare-material-v2.txt`](../backend/internal/generation/prompts/prepare-material-v2.txt) | Критерии оценки A1–C2 для новых запросов |
-| [`backend/internal/generation/prompts/generate-module-v1.txt`](../backend/internal/generation/prompts/generate-module-v1.txt) | Инструкция генерации упражнений |
+| [`backend/internal/generation/prompts/generate-module-v1.txt`](../backend/internal/generation/prompts/generate-module-v1.txt) | Инструкция для сохранённых работ версии v1, поддерживает семь закрытых типов |
+| [`backend/internal/generation/prompts/generate-module-v2.txt`](../backend/internal/generation/prompts/generate-module-v2.txt) | Инструкция для новых работ, включая открытые вопросы |
 | [`backend/internal/generation/schemas/prepare-material-v1.json`](../backend/internal/generation/schemas/prepare-material-v1.json) | Ожидаемый JSON с единственным полем `level` |
 | [`backend/internal/models/llm`](../backend/internal/models/llm) | Структуры `Material` и `LLMRequest` |
 | [`backend/internal/database/invariants.sql`](../backend/internal/database/invariants.sql) | Дополнительные проверки статусов, связей и единственного активного запроса |
@@ -421,12 +380,13 @@ curl.exe -X POST http://localhost:8080/api/materials/extract -F "file=@material.
 | `MaterialService.GetMaterialByID(ctx, id)` | Прочитать материал без проверки владельца |
 | `MaterialService.GetLLMRequestByID(ctx, id)` | Прочитать состояние запроса без проверки владельца |
 | `ModuleGenerationService.CreateGeneratedModule(ctx, materialID, key, input)` | Создать модуль и запрос генерации либо вернуть прежнюю пару |
+| `ModuleGenerationService.GetGeneratedModuleByID(ctx, moduleID)` | Прочитать модуль из генерации и узнать его состояние |
 | `ModuleGenerationService.ListGeneratedModuleExercises(ctx, moduleID, limit, offset)` | Получить страницу упражнений готового модуля |
 | `PreparationWorker.RunUntilStopped` | Выполнять очередь до остановки приложения |
 | `PreparationWorker.ProcessNextPreparationRequest` | Обработать не больше одной работы |
 | `ChatCompletionClient.HasAPIKeys` | Проверить наличие ключей без сетевого вызова |
 | `ChatCompletionClient.DetectCEFRLevel` | Определить уровень текста |
-| `ChatCompletionClient.GenerateExercises` | Запросить и проверить лексические и грамматические задания |
+| `ChatCompletionClient.GenerateExercises` | Запросить и проверить упражнения по материалу |
 | `NormalizeAndValidateText` | Проверить и нормализовать текст |
 | `ExtractTextFromFile` | Извлечь текст для предварительного просмотра |
 
@@ -463,9 +423,11 @@ go vet ./...
 
 Затем проверьте оба этапа на работающем сервере. [Сценарий в PowerShell](#пример-полного-сценария-в-powershell)
 
-## Генерация лексики и грамматики
+<a id="генерация-лексики-и-грамматики"></a>
 
-После подготовки материала отправьте `POST /api/materials/{material_id}/modules` с новым UUID в `Idempotency-Key`. Например, если первый POST вернул `material.id = 12`, отправьте запрос на `/api/materials/12/modules`.
+## Генерация упражнений и вопросов
+
+После подготовки добавьте `/modules` к адресу материала и отправьте POST с новым UUID в `Idempotency-Key`. Например, материалу `/api/materials/12` соответствует адрес генерации `/api/materials/12/modules`.
 
 | Поле JSON | Значение |
 |---|---|
@@ -477,12 +439,19 @@ go vet ./...
 
 Каждому типу достаётся одинаковое число упражнений, остаток распределяется по одному первым типам в списке. Например, пять упражнений двух типов распределятся как три и два.
 
-| Лексика | Грамматика |
-|---|---|
-| `vocabulary_gap` — пропуск слова | `grammar_brackets` — раскрытие скобок |
-| `vocabulary_matching_translation` — подбор перевода | `grammar_tense` — выбор времени |
-| `vocabulary_matching_definition` — подбор определения | `grammar_word_order` — порядок слов |
-| `vocabulary_context_choice` — выбор слова по контексту | |
+| Группа | Тип | Что получает ученик |
+|---|---|---|
+| Лексика | `vocabulary_gap` | Пропуск слова с выбором ответа |
+| Лексика | `vocabulary_matching_translation` | Слова и переводы для сопоставления |
+| Лексика | `vocabulary_matching_definition` | Слова и определения для сопоставления |
+| Лексика | `vocabulary_context_choice` | Выбор слова по контексту |
+| Грамматика | `grammar_brackets` | Выбор нужной формы слова в скобках |
+| Грамматика | `grammar_tense` | Выбор времени |
+| Грамматика | `grammar_word_order` | Восстановление порядка слов |
+| Вопросы | `comprehension_question` | Открытый вопрос на понимание фактов из текста |
+| Вопросы | `reasoning_question` | Открытый вопрос, где нужно обосновать вывод по тексту |
+
+У открытого вопроса `content.format` равен `free_text`. В `content.context` ученик видит отрывок из материала, по которому отвечает своими словами. Воркер проверяет, что отрывок встречается в исходном материале. На сервере сохраняется `answer_key.rubric` с 1–10 непустыми критериями в `criteria` и необязательным примером ответа в `reference_answer`. Если модель добавила в `content.vocabulary` слова для подсказки, их должно быть ровно пять разных. В публичную выдачу ключ и объяснение не попадают. Этот модуль проверяет задания, сгенерированные моделью. Оценивание ответов ученика в его задачи не входит.
 
 Если PostgreSQL запущен через Compose, выполните эти команды из корня проекта, чтобы посмотреть ID тем. Можно выбрать строку с `slug = it`.
 
@@ -501,10 +470,10 @@ POST /api/materials/12/modules HTTP/1.1
 Content-Type: application/json
 Idempotency-Key: 70c66f36-5426-43e8-9e2a-04e8733f4a3f
 
-{"title":"Algorithms practice","topic_id":1,"difficulty":"B1","count":4,"types":["vocabulary_gap","grammar_word_order"]}
+{"title":"Algorithms practice","topic_id":1,"difficulty":"B1","count":4,"types":["vocabulary_gap","grammar_word_order","comprehension_question","reasoning_question"]}
 ```
 
-`POST /api/materials/12/modules` вернёт HTTP 202. Ниже показаны поля, которые нужны для следующих шагов.
+В ответе HTTP 202 сервер передаёт `Location: /api/modules/7`. Сокращённое тело ответа показывает связь с материалом.
 
 ```json
 {
@@ -513,7 +482,9 @@ Idempotency-Key: 70c66f36-5426-43e8-9e2a-04e8733f4a3f
 }
 ```
 
-Опрашивайте `GET /api/llm-requests/35` раз в 2–3 секунды до `succeeded` или `failed`. Воркер загружает подготовленный текст, вызывает модель с инструкцией `generate-module-v1` и проверяет формат, число заданий и ссылки в ключах. Упражнения, статус модуля `ready` и статус запроса `succeeded` сохраняются одной транзакцией. Если ответ модели не проходит проверку, модуль получает статус `failed`.
+Читайте `GET /api/modules/7` до `ready` или `failed`. Воркер загружает подготовленный текст по `material_id`. Для новых работ выбирается инструкция `generate-module-v2`. Ранее поставленные в очередь работы с `generate-module-v1` обрабатываются по прежней инструкции для семи закрытых типов.
+
+До сохранения воркер проверяет соответствие типов и количества плану, структуру заданий, ссылки в ключах закрытых заданий, отрывок и критерии открытых вопросов. Воркер группирует упражнения по порядку типов из POST. Прошедшие проверку упражнения сохраняются вместе с переводом модуля в `ready` в одной транзакции. При недопустимом ответе модели модуль переходит в `failed`, частичный набор упражнений не выдаётся.
 
 ### Чтение упражнений
 
@@ -556,86 +527,76 @@ GET /api/modules/7/exercises?limit=1&offset=0 HTTP/1.1
 
 ## Пример полного сценария в PowerShell
 
-Выполните блок целиком в одной сессии PowerShell после запуска сервера. Укажите ID темы из таблицы `topics`. Если переопределили `PORT`, укажите свой порт в `$baseUrl`. Для пробы с файлом замените `$materialText` на поле `text`, полученное при импорте. [Запуск](#запуск) · [Как посмотреть темы](#генерация-лексики-и-грамматики) · [Импорт файла](#предварительный-импорт-файла)
+Запустите сервер и узнайте ID существующей темы. Выполните блок в одной сессии PowerShell. Для другого порта укажите свой `$baseUrl`. Чтобы взять текст из файла, подставьте в `$materialText` поле `text` из результата импорта. [Запуск](#запуск) · [Как посмотреть темы](#генерация-упражнений-и-вопросов) · [Импорт файла](#предварительный-импорт-файла)
 
 ```powershell
-function Send-LLMPost($Request) {
-    for ($attempt = 1; $attempt -le 3; $attempt++) {
-        try {
-            return Invoke-RestMethod @Request
-        } catch {
-            # При обрыве соединения повторяем тот же адрес, тело и UUID.
-            if ($_.Exception.Response -or $attempt -eq 3) { throw }
-            Start-Sleep -Seconds 2
-        }
+function Send-ResourcePost([string]$Uri, [hashtable]$Data, [string]$Key) {
+    $request = @{
+        Uri = $Uri
+        Method = 'Post'
+        Headers = @{ 'Idempotency-Key' = $Key }
+        ContentType = 'application/json; charset=utf-8'
+        Body = [Text.Encoding]::UTF8.GetBytes(($Data | ConvertTo-Json))
+        TimeoutSec = 15
+        UseBasicParsing = $true
+        ErrorAction = 'Stop'
     }
+    $response = Invoke-WebRequest @request
+    $location = $response.Headers['Location'] | Select-Object -First 1
+    if (-not $location) { throw "Сервер не вернул Location для $Uri" }
+    return [uri]::new([uri]$Uri, [string]$location).AbsoluteUri
 }
 
-function Wait-LLMRequest([long]$RequestId) {
-    $statusUrl = "$baseUrl/api/llm-requests/$RequestId"
+function Wait-ReadyResource([string]$Uri) {
     $deadline = [DateTimeOffset]::UtcNow.AddMinutes(5)
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
-        $request = Invoke-RestMethod -Uri $statusUrl -TimeoutSec 10 -ErrorAction Stop
-        if ($request.status -eq 'succeeded') { return $request }
-        if ($request.status -eq 'failed') {
-            throw "Запрос $RequestId завершился с ошибкой $($request.error.code). $($request.error.message)"
+        $resource = Invoke-RestMethod -Uri $Uri -TimeoutSec 10 -ErrorAction Stop
+        switch ($resource.status) {
+            'ready' { return $resource }
+            'failed' {
+                if ($resource.error) { throw "$Uri — $($resource.error.code). $($resource.error.message)" }
+                throw "Обработка завершилась ошибкой. Адрес ресурса — $Uri"
+            }
+            { $_ -in 'pending', 'generating' } { Start-Sleep -Seconds 2 }
+            default { throw "Неизвестный статус $($resource.status) у $Uri" }
         }
-        Start-Sleep -Seconds 2
     }
-    throw "Истекло время ожидания. Текущий статус доступен по адресу $statusUrl"
+    throw "Время ожидания истекло. Повторите чтение по адресу $Uri"
 }
 
 $baseUrl = 'http://localhost:8080'
 $topicId = [long](Read-Host 'Введите ID существующей темы')
 if ($topicId -lt 1) { throw 'ID темы должен быть положительным числом.' }
-$materialText = 'An algorithm is a series of steps used to solve a problem. A programmer tests each step before using the algorithm.'
-
-$materialPost = @{
-    Uri = "$baseUrl/api/materials"
-    Method = 'Post'
-    Headers = @{ 'Idempotency-Key' = [guid]::NewGuid().ToString() }
-    ContentType = 'application/json; charset=utf-8'
-    Body = (@{ kind = 'text'; title = 'Algorithms'; text = $materialText } | ConvertTo-Json)
-    TimeoutSec = 15
-    ErrorAction = 'Stop'
-}
-$created = Send-LLMPost $materialPost
-Write-Host "Материал $($created.material.id), запрос подготовки $($created.llm_request.id)"
-$null = Wait-LLMRequest $created.llm_request.id
-
-$material = Invoke-RestMethod -Uri "$baseUrl/api/materials/$($created.material.id)" -TimeoutSec 10 -ErrorAction Stop
-if ($material.status -ne 'ready') { throw 'Материал ещё не готов.' }
+$materialText = 'Every Tuesday, Nina visits the library after school. She borrows one book and returns it the following week. She likes the library because it is quiet.'
+$materialData = @{ kind = 'text'; title = 'Library visit'; text = $materialText }
+$materialKey = [guid]::NewGuid().ToString()
+$materialUrl = Send-ResourcePost "$baseUrl/api/materials" $materialData $materialKey
+Write-Host "Материал — $materialUrl"
+$material = Wait-ReadyResource $materialUrl
 $material | Select-Object id, status, level, extracted_text
 
-$modulePost = @{
-    Uri = "$baseUrl/api/materials/$($material.id)/modules"
-    Method = 'Post'
-    Headers = @{ 'Idempotency-Key' = [guid]::NewGuid().ToString() }
-    ContentType = 'application/json; charset=utf-8'
-    Body = (@{
-        title = 'Algorithms practice'
-        topic_id = $topicId
-        difficulty = $material.level
-        count = 4
-        types = @('vocabulary_gap', 'grammar_word_order')
-    } | ConvertTo-Json)
-    TimeoutSec = 15
-    ErrorAction = 'Stop'
+$moduleData = @{
+    title = 'Library practice'
+    topic_id = $topicId
+    difficulty = $material.level
+    count = 4
+    types = @('vocabulary_gap', 'grammar_word_order', 'comprehension_question', 'reasoning_question')
 }
-$generated = Send-LLMPost $modulePost
-Write-Host "Модуль $($generated.module.id), запрос генерации $($generated.llm_request.id)"
-$null = Wait-LLMRequest $generated.llm_request.id
+$moduleKey = [guid]::NewGuid().ToString()
+$moduleUrl = Send-ResourcePost "$materialUrl/modules" $moduleData $moduleKey
+Write-Host "Модуль — $moduleUrl"
+$module = Wait-ReadyResource $moduleUrl
+$module | Select-Object id, material_id, status, exercise_count
 
-$exerciseUrl = "$baseUrl/api/modules/$($generated.module.id)/exercises"
 $offset = 0
 do {
-    $page = Invoke-RestMethod -Uri "${exerciseUrl}?limit=2&offset=$offset" -TimeoutSec 10 -ErrorAction Stop
+    $page = Invoke-RestMethod -Uri "$moduleUrl/exercises?limit=2&offset=$offset" -TimeoutSec 10 -ErrorAction Stop
     $page.items | ConvertTo-Json -Depth 10
     $offset += $page.limit
 } while ($page.has_more)
 ```
 
-Сценарий опрашивает каждый запрос раз в две секунды с пределом ожидания около пяти минут. Если ожидание истекло, продолжите опрос по тому же ID. Если POST завершился сетевой ошибкой и ответ так и не пришёл, повторите нужную строку `$created = Send-LLMPost $materialPost` или `$generated = Send-LLMPost $modulePost` в той же сессии и продолжите со следующей строки. Эти переменные сохраняют адрес, тело и UUID. Повтор всего блока создаст новые UUID.
+При обрыве связи во время POST в той же сессии повторите строку с `Send-ResourcePost` для этого этапа. Переменные сохраняют прежнее тело и ключ. Если истекло время ожидания готовности, повторите строку с `Wait-ReadyResource` для уже известного адреса. Повтор блока с самого начала создаст новые ключи.
 
 ## Как расширять модуль
 
